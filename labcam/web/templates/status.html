@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Station Status - Lab Imaging{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <h1>Station status</h1>
+    <a class="primary-link" href="/new">New experiment</a>
+  </section>
+
+  <div id="status-message" class="message" role="status" hidden></div>
+
+  <section class="table-wrap" aria-label="Station status">
+    <table>
+      <thead>
+        <tr>
+          <th>Station</th>
+          <th>State</th>
+          <th>Identity</th>
+          <th>Experiment</th>
+          <th>Elapsed</th>
+          <th>Images</th>
+          <th>Remaining</th>
+          <th>Latest frame</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="status-table-body">
+        <tr>
+          <td colspan="9">Loading stations...</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='status.js') }}"></script>
+{% endblock %}
