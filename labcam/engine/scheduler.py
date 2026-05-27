@@ -4,12 +4,13 @@ import json
 import math
 import shutil
 import threading
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
 
-from labcam.cameras.interface import CameraInfo, capture_frame, save_jpeg
+from labcam.cameras.interface import CameraInfo, capture_frame, preview_frame, save_jpeg
 from labcam.engine.experiment import (
     ActiveExperimentError,
     BaselineCaptureError,
@@ -59,6 +60,22 @@ class CameraRecord:
         )
 
 
+class _CaptureMarker:
+    def __init__(self, engine: "CaptureEngine", camera_label: str) -> None:
+        self.engine = engine
+        self.camera_label = camera_label
+
+    def __enter__(self) -> None:
+        with self.engine._lock:
+            self.engine._capturing_cameras[self.camera_label] = (
+                self.engine._capturing_cameras.get(self.camera_label, 0) + 1
+            )
+
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
+        with self.engine._lock:
+            self.engine._unmark_capturing(self.camera_label)
+
+
 class CaptureEngine:
     def __init__(
         self,
@@ -68,6 +85,7 @@ class CaptureEngine:
         cameras_path: Path = DEFAULT_CAMERAS_PATH,
         state_path: Path = DEFAULT_STATE_PATH,
         capture_func: Callable[[CameraInfo], Any] = capture_frame,
+        preview_func: Callable[[CameraInfo], Any] = preview_frame,
         save_jpeg_func: Callable[..., Path] = save_jpeg,
         disk_usage_func: Callable[[Path], shutil._ntuple_diskusage] = shutil.disk_usage,
         now_func: Callable[[], datetime] = local_now,
@@ -87,6 +105,7 @@ class CaptureEngine:
         self.experiments_dir = self.experiments_dir.resolve()
         self.state = RunningStateManager(state_path)
         self.capture_func = capture_func
+        self.preview_func = preview_func
         self.save_jpeg_func = save_jpeg_func
         self.disk_usage_func = disk_usage_func
         self.now_func = now_func
@@ -96,6 +115,7 @@ class CaptureEngine:
         self._active: dict[str, Experiment] = {}
         self._finished: dict[str, Experiment] = {}
         self._starting_cameras: set[str] = set()
+        self._capturing_cameras: dict[str, int] = {}
         self._lock = threading.RLock()
         self._wake = threading.Event()
         self._shutdown = threading.Event()
@@ -195,6 +215,34 @@ class CaptureEngine:
             with self._lock:
                 self._starting_cameras.discard(camera.label)
             raise
+
+    def start(self) -> None:
+        with self._lock:
+            self._ensure_thread()
+
+    def list_cameras(self) -> list[CameraRecord]:
+        return self._load_cameras()
+
+    def preview(self, camera_label: str, *, output_dir: Path | None = None) -> Path:
+        camera = self._camera_record(camera_label)
+        with self._lock:
+            if self._capturing_cameras.get(camera.label, 0) > 0:
+                raise ActiveExperimentError(f"Camera {camera.label} is currently capturing")
+            self._capturing_cameras[camera.label] = self._capturing_cameras.get(camera.label, 0) + 1
+
+        try:
+            frame = self.preview_func(camera.to_camera_info())
+            preview_dir = Path(output_dir) if output_dir is not None else Path(tempfile.gettempdir())
+            preview_dir.mkdir(parents=True, exist_ok=True)
+            safe_label = "".join(
+                char if char.isalnum() or char in {"-", "_"} else "-"
+                for char in camera.label
+            ).strip("-") or "camera"
+            output_path = preview_dir / f"labcam-preview-{safe_label}.jpg"
+            return self.save_jpeg_func(frame, output_path, quality=self.jpeg_quality)
+        finally:
+            with self._lock:
+                self._unmark_capturing(camera.label)
 
     def stop_experiment(self, experiment_id: str) -> None:
         with self._lock:
@@ -312,16 +360,17 @@ class CaptureEngine:
 
         for attempt in range(1, attempts + 1):
             try:
-                frame = self.capture_func(camera.to_camera_info())
-                captured_at = self.now_func()
-                image_path = save_frame_as_jpeg(
-                    image=frame,
-                    paths=experiment.paths,
-                    sequence=sequence,
-                    captured_at=scheduled_at,
-                    jpeg_quality=self.jpeg_quality,
-                    save_jpeg_func=self.save_jpeg_func,
-                )
+                with self._mark_capturing(camera.label):
+                    frame = self.capture_func(camera.to_camera_info())
+                    captured_at = self.now_func()
+                    image_path = save_frame_as_jpeg(
+                        image=frame,
+                        paths=experiment.paths,
+                        sequence=sequence,
+                        captured_at=scheduled_at,
+                        jpeg_quality=self.jpeg_quality,
+                        save_jpeg_func=self.save_jpeg_func,
+                    )
                 append_log_line(
                     experiment.paths.log_path,
                     captured_at,
@@ -346,6 +395,16 @@ class CaptureEngine:
             f"seq={sequence:04d} failed after retries; sequence gap recorded",
         )
         raise EngineError(str(last_error) if last_error else "capture failed")
+
+    def _mark_capturing(self, camera_label: str) -> "_CaptureMarker":
+        return _CaptureMarker(self, camera_label)
+
+    def _unmark_capturing(self, camera_label: str) -> None:
+        count = self._capturing_cameras.get(camera_label, 0)
+        if count <= 1:
+            self._capturing_cameras.pop(camera_label, None)
+        else:
+            self._capturing_cameras[camera_label] = count - 1
 
     def _finalize(self, experiment_id: str, reason: str) -> None:
         with self._lock:

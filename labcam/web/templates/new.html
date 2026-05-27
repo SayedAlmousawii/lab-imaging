@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}New Experiment - Lab Imaging{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <h1>New experiment</h1>
+    <a class="secondary-link" href="/">View status</a>
+  </section>
+
+  <div id="form-message" class="message" role="status" hidden></div>
+
+  <form id="experiment-form" class="experiment-form">
+    <label>
+      Camera
+      <select id="camera-label" name="camera_label" required></select>
+    </label>
+
+    <label>
+      Experiment name
+      <input id="experiment-name" name="name" type="text" required autocomplete="off">
+    </label>
+    <p id="name-warning" class="inline-warning" role="status" hidden></p>
+
+    <div class="form-grid">
+      <label>
+        Interval, minutes
+        <input
+          id="interval-minutes"
+          name="interval_minutes"
+          type="number"
+          min="0.01"
+          step="0.01"
+          value="{{ default_interval_minutes }}"
+          required
+        >
+      </label>
+
+      <label>
+        Duration, hours
+        <input
+          id="duration-hours"
+          name="duration_hours"
+          type="number"
+          min="0.01"
+          step="0.01"
+          value="{{ default_duration_hours }}"
+          required
+        >
+      </label>
+    </div>
+
+    <label>
+      Operator
+      <input id="operator" name="operator" type="text" autocomplete="name">
+    </label>
+
+    <label>
+      Notes
+      <textarea id="notes" name="notes" rows="4"></textarea>
+    </label>
+
+    <div class="button-row">
+      <button id="preview-button" type="button">Preview</button>
+      <button id="start-button" type="submit">Start</button>
+    </div>
+  </form>
+
+  <section class="preview-panel" aria-label="Preview image">
+    <img id="preview-image" alt="Latest preview" hidden>
+    <p id="preview-placeholder">No preview yet.</p>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='new.js') }}"></script>
+{% endblock %}

@@ -9,16 +9,16 @@ changed (write "no changes this session" explicitly under that date).
 
 ## Current state
 
-- **Current phase:** Phase 2 — capture engine implemented and validated;
-  ready for review/merge. Phase 3 can begin after Phase 2 lands.
-- **Current branch:** `phase-2-capture-engine`.
+- **Current phase:** Phase 3 — local Flask dashboard implemented,
+  review notes fixed, and validated on the Mac dev machine; ready for
+  review.
+- **Current branch:** `phase-3-dashboard`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
   camera at index 2; it is excluded from the current lab camera mapping.
   The Codex app process still lacks macOS camera permission, but the
   approved Terminal can run the real-camera driver successfully.
-- **Next actions:** Review/merge Phase 2. After Phase 2 lands, begin
-  Phase 3 on a new branch from updated `main`.
+- **Next actions:** Review/merge Phase 3 dashboard branch.
 
 ---
 
@@ -147,3 +147,126 @@ changed (write "no changes this session" explicitly under that date).
   - `.venv/bin/python tools/phase2_driver.py --profile spec --cameras
     station1 station2` passed 6/6 scenarios.
 - No push was performed.
+
+### 2026-05-28 — Phase 3 Flask dashboard implemented
+
+- Refreshed `origin`, confirmed local `main` matched `origin/main` at
+  Phase 2 merge commit `ab7f352`, and created branch
+  `phase-3-dashboard` from `main`.
+- Implemented `labcam/main.py` as the `python -m labcam.main` entry
+  point. It creates `config/settings.json` from the example if missing,
+  refuses startup without `config/cameras.json`, runs startup recovery
+  through `CaptureEngine`, starts the scheduler thread, and binds Flask
+  to `127.0.0.1` unless `allow_lan_access` is true.
+- Implemented the Phase 3 Flask dashboard in `labcam/web/server.py`,
+  `labcam/web/templates/`, and `labcam/web/static/` using plain
+  HTML/CSS/vanilla JS and no build step.
+- Added JSON routes for cameras, preview, experiment start, early stop,
+  station status, and latest-frame thumbnails.
+- Added engine support for dashboard preview and status needs:
+  `CaptureEngine.start()`, `CaptureEngine.list_cameras()`, and
+  `CaptureEngine.preview()`. Preview uses
+  `labcam.cameras.preview_frame()` and the same save path; scheduled
+  capture bookkeeping now marks cameras as in-capture so same-camera
+  previews return a busy error instead of queueing behind an active
+  capture.
+- Updated `requirements.txt` with `Flask==3.1.1` and documented the
+  local/no-auth dashboard plus LAN-access warning in `README.md`.
+- Browser UI validation passed from the macOS Terminal-hosted server
+  because the Codex app process still lacks camera permission:
+  - Full workflow: `/new` preview -> start -> `/` running status with
+    thumbnail -> stop early -> experiment folder written.
+  - Two concurrent experiments from the UI ran on `station1` and
+    `station2`, both showing running status and thumbnails.
+  - Preview while another station was running scheduled captures returned
+    a fresh inline JPEG for the idle station.
+  - Attempting to start a second experiment on the selected busy camera
+    showed the clear UI error "That camera already has a running
+    experiment."
+- Filesystem check after UI validation found generated experiment
+  folders under ignored `experiments/` with metadata, logs, and 105
+  total JPEGs from the test runs.
+- Validation passed:
+  - `.venv/bin/python -m compileall labcam tools`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches
+  - `rg "platform\\.system|sys\\.platform|os\\.name" -n labcam tools`
+    reports only `labcam/cameras/interface.py`
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches
+- Screenshots saved outside the repo for this session:
+  `/private/tmp/labcam-busy-camera-ui.png` and
+  `/private/tmp/labcam-status-ui.png`.
+- No push was performed.
+
+### 2026-05-28 — Phase 3 dashboard notes fixed
+
+- Fixed the confusing post-start busy-camera message on `/new`.
+  Starting an experiment now preserves a neutral success message:
+  "Experiment started. This camera is now running."
+- Fixed busy-camera controls on `/new`. When the selected camera is
+  running, Preview and Start are disabled and Start reads
+  "Camera running"; selecting an idle camera restores both controls.
+- Fixed stale-tab busy-camera handling. If another browser tab starts a
+  camera after the form loaded, the server-side `camera_busy` response
+  still shows as an error and the form refreshes camera availability so
+  the selected running camera becomes locked.
+- Added independent latest-frame thumbnail refresh on `/`: running
+  station thumbnails re-request `/api/experiments/<id>/latest` every
+  three seconds while the full status table keeps its ten-second poll.
+  This remains repeated still-image fetching, not streaming.
+- Browser validation passed on the Terminal-hosted real-camera server
+  at port 5055:
+  - Successful start kept the neutral success message and locked the
+    selected running camera.
+  - Switching the dropdown to the idle camera re-enabled Preview and
+    Start.
+  - Running station thumbnail `src` changed after the three-second
+    thumbnail refresh interval, before the ten-second table poll.
+  - A stale second tab submitted a now-busy camera, showed the
+    server-side busy error, refreshed availability, and locked the
+    selected running camera.
+- Validation passed:
+  - `.venv/bin/python -m compileall labcam tools`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches
+  - `rg "platform\\.system|sys\\.platform|os\\.name" -n labcam tools`
+    reports only `labcam/cameras/interface.py`
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches
+- Test experiments were stopped or naturally completed before the
+  server was shut down. Runtime test output remains under ignored
+  `experiments/`.
+- No push was performed.
+
+### 2026-05-28 — Duplicate experiment name warning added
+
+- Confirmed duplicate experiment names do not overwrite existing data:
+  storage creates a suffix such as `_2` or `_3` when the same
+  date/name/camera folder already exists.
+- Added `POST /api/experiments/name-check`, a read-only dashboard API
+  that previews the folder name the next run would use without creating
+  files.
+- Updated `/new` to warn when the selected camera/name would reuse an
+  existing date/name/camera base folder. The warning names the exact
+  suffixed folder that will be created.
+- Browser validation passed on the Terminal-hosted dashboard at port
+  5055:
+  - Entering duplicate `testtt` on `station1` showed
+    `2026-05-28_testtt_station1_3`.
+  - Entering a unique name cleared the warning.
+- Validation passed:
+  - `.venv/bin/python -m compileall labcam tools`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches
+  - `rg "platform\\.system|sys\\.platform|os\\.name" -n labcam tools`
+    reports only `labcam/cameras/interface.py`
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches
+- Screenshot saved outside the repo:
+  `/private/tmp/labcam-duplicate-name-warning.png`.
+- Dashboard was left running on port 5055 for the human to continue
+  trying. No push was performed.
