@@ -176,3 +176,37 @@ them here so a future session can revisit if any feel wrong.
   auth is set up); letting the AI push to `main` directly with
   approval (still wrong — phase-branch-only is a separate invariant
   and shouldn't be relaxed at the same time).
+
+### 11. Phase 3 web framework: Flask, not FastAPI
+
+- **Decided:** The Phase 3 dashboard uses Flask. Pinned in
+  `requirements.txt` at the time Phase 3 begins.
+- **Why:** The dashboard is local, low-traffic, request/response only —
+  no streaming, no websockets, no fan-out. Flask's smaller dependency
+  tree (no Pydantic / Starlette / ASGI server) installs cleanly on the
+  Windows lab machine. Synchronous Python composes naturally with the
+  engine's threading model (scheduler thread + process-wide capture
+  lock); FastAPI's async story would invite async/sync mixing bugs in
+  code paths where the engine is firmly synchronous.
+- **Considered and rejected:** FastAPI (extra deps, async/sync friction
+  for zero benefit at this scale); deciding at Phase 3 start (the
+  decision is already obvious from the constraints — no reason to
+  defer).
+
+### 12. Baseline-capture failure leaves the folder behind
+
+- **Decided:** If the t=0 baseline capture fails after retries, the
+  experiment folder and its `metadata.json` are kept, with
+  `metadata.json` finalized as `end_reason="baseline_failed"`,
+  `images_captured=0`, and `ended_at=<now>`. No entry is added to
+  `running_state.json`. The `start_experiment` call returns failure to
+  the caller.
+- **Why:** Preserves the forensic record of the failed attempt — was
+  the camera label wrong, the camera offline, the disk failing? The
+  dashboard and future sessions can see "this station tried to start
+  at HH:MM and failed" instead of silently pretending nothing happened.
+- **Considered and rejected:** Deleting the folder (cleaner listing,
+  but loses diagnostic value — and a crash mid-baseline would orphan
+  anyway); leaving the folder but not finalizing `metadata.json`
+  (creates "running"-looking entries on disk that aren't actually
+  running, confusing later sessions).
