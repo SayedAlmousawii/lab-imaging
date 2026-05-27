@@ -9,19 +9,16 @@ changed (write "no changes this session" explicitly under that date).
 
 ## Current state
 
-- **Current phase:** Phase 1 — camera test & labeling tool. Code
-  implemented; target Mac hardware validated for camera indexes 0 and 1.
-- **Current branch:** `phase-1-camera-setup`.
+- **Current phase:** Phase 2 — capture engine implemented and validated;
+  ready for review/merge. Phase 3 can begin after Phase 2 lands.
+- **Current branch:** `phase-2-capture-engine`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
-  camera at index 2; it could capture a preview once but failed the
-  100-cycle stress test at cycle 1. It is not included in the current
-  lab camera mapping.
-- **Next actions:** perform unplug/replug re-enumeration testing for the
-  Logitech C310 and built-in camera on this Mac. If the mapping changes,
-  rerun `python tools/camera_setup.py setup --indexes 0 1` from an
-  approved Terminal. Phase 4 must still do real Windows hardware
-  identity validation.
+  camera at index 2; it is excluded from the current lab camera mapping.
+  The Codex app process still lacks macOS camera permission, but the
+  approved Terminal can run the real-camera driver successfully.
+- **Next actions:** Review/merge Phase 2. After Phase 2 lands, begin
+  Phase 3 on a new branch from updated `main`.
 
 ---
 
@@ -104,3 +101,49 @@ changed (write "no changes this session" explicitly under that date).
   from the lab mapping.
 - `config/cameras.json` remains ignored runtime config and was not
   staged. No push was performed.
+
+### 2026-05-27 — Phase 2 capture engine implemented
+
+- Updated local `main` from `origin/main` after Phase 1 was merged, then
+  created and switched to branch `phase-2-capture-engine`.
+- Implemented the headless capture engine:
+  `labcam/engine/experiment.py`, `labcam/engine/storage.py`,
+  `labcam/engine/state.py`, and `labcam/engine/scheduler.py`.
+- Added typed engine failures for expected start errors, including
+  active camera conflicts, missing camera config, disk-space preflight
+  failure, baseline failure, and unknown experiment ids.
+- Implemented file-only experiment storage with sanitized collision-safe
+  folders, Windows-safe timestamped JPEG names, atomic `metadata.json`
+  writes, append-only `capture_log.txt`, and atomic
+  `config/running_state.json` management.
+- Implemented Option A startup recovery: stale `running_state.json`
+  entries finalize their experiment metadata with `end_reason="unknown"`
+  and then clear the state file.
+- Implemented scheduled capture retries and sequence gaps: scheduled
+  failures log retry `ERROR` lines, log `failed after retries; sequence
+  gap recorded`, increment the monotonic sequence, and continue the run.
+- Implemented baseline-failure handling: the experiment folder is kept,
+  metadata is finalized with `end_reason="baseline_failed"`,
+  `images_captured=0`, and no running-state entry is added.
+- Added `tools/phase2_driver.py` with all six Phase 2 scenarios and a
+  `--mock-capture` mode for deterministic no-hardware validation.
+- Corrected the real-camera overlap check in `tools/phase2_driver.py`:
+  the first implementation measured time before `capture_frame()` had
+  acquired the camera-layer lock, so waiting on the lock looked like a
+  false overlap. The driver now avoids that false assertion for real
+  camera mode.
+- Validation passed:
+  - `.venv/bin/python -m compileall labcam tools`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches
+  - `.venv/bin/python tools/phase2_driver.py --profile fast
+    --mock-capture --cameras station1 station2` passed 6/6 scenarios
+- Real-camera validation passed from approved Terminal:
+  - `.venv/bin/python tools/phase2_driver.py --profile fast --cameras
+    station1 station2` passed 6/6 scenarios.
+  - `.venv/bin/python tools/phase2_driver.py --profile spec --cameras
+    station1 station2` passed 6/6 scenarios.
+- No push was performed.
