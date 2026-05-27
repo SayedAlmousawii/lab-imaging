@@ -1,0 +1,11 @@
+{
+  "experiments_dir": "./experiments",
+  "web_port": 5000,
+  "allow_lan_access": false,
+  "warmup_frames": 5,
+  "capture_retries": 2,
+  "default_interval_minutes": 5,
+  "default_duration_hours": 12,
+  "jpeg_quality": 90
+}
+
