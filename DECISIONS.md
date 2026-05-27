@@ -119,3 +119,37 @@ bottom under their date heading.
   for Mac dev (wasteful — Windows verification is already mandatory);
   shipping without ever testing the identical-device case (unacceptable
   — multi-station deployment depends on it).
+
+### 9. Process-doc conventions resolved during initialization
+
+These were ambiguous calls made while seeding the scaffolding. Surfacing
+them here so a future session can revisit if any feel wrong.
+
+- **Decided:** `AGENTS.md` is *not* dated — it contains invariants only,
+  so there is nothing to date. The "dated entries" convention applies
+  to `HANDOFF.md`'s session log and to `DECISIONS.md` only. `HANDOFF.md`
+  carries an undated "Current state" snapshot at the top plus a dated
+  session log below.
+  - **Why:** A rulebook of invariants does not benefit from per-rule
+    dates; revisions to it should rewrite the rule in place. Dated
+    entries make sense where the history matters (decisions log, session
+    log) and add noise where it does not (invariants).
+  - **Considered and rejected:** Dating every section of `AGENTS.md`
+    (would imply rules expire or accrete chronologically, which is
+    wrong); keeping `HANDOFF.md` entirely as a dated log with no
+    snapshot (forces a new session to read the whole history just to
+    learn the current branch and phase).
+- **Decided:** "Dated entries" use the human's local lab date, not UTC.
+  - **Why:** The whole project uses local lab time for timestamps in
+    metadata, logs, and filenames (per `04_DATA_FORMATS.md`). Process
+    docs should match.
+  - **Considered and rejected:** UTC dating for the process docs
+    (inconsistent with on-disk data conventions).
+- **Decided:** macOS identity-strategy preference order in Phase 1 is
+  `hardware_id` → `usb_port` → `index_fallback`, with each fallback
+  required to record a warning.
+  - **Why:** Spelled out in the spec's intent but never as an explicit
+    ordering. Making it explicit prevents Phase 1 from silently picking
+    `index_fallback` when `usb_port` was available.
+  - **Considered and rejected:** Letting the OS helper choose freely
+    (risk of silent regressions).
