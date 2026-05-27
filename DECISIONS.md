@@ -210,3 +210,18 @@ them here so a future session can revisit if any feel wrong.
   anyway); leaving the folder but not finalizing `metadata.json`
   (creates "running"-looking entries on disk that aren't actually
   running, confusing later sessions).
+
+### 13. macOS multi-camera identity uses index fallback in Phase 1
+
+- **Decided:** On macOS, when more than one OpenCV camera index is
+  detected, Phase 1 records `identity_strategy="index_fallback"` for
+  each index instead of assigning hardware IDs from `system_profiler`.
+- **Why:** Live testing showed `system_profiler` camera metadata order
+  does not safely correlate to OpenCV AVFoundation index order. A
+  wrong `hardware_id` assignment is more dangerous than an explicit
+  weak mapping. The setup tool still captures previews so the operator
+  can label the physical cameras, and warnings make the weakness loud.
+- **Considered and rejected:** Pairing metadata rows to indexes by
+  list position (observed to swap camera identities); omitting metadata
+  warnings entirely (would hide the durability limitation from later
+  phases).
