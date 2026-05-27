@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Project runtime output
+experiments/
+config/cameras.json
+config/running_state.json
+config/settings.json
+
+# Tracked: config/settings.json.example
+!config/settings.json.example
