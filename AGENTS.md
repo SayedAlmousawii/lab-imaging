@@ -79,8 +79,14 @@ of the whole system. Violating any of them breaks something important.
 
 - **Work only on the current phase branch.** Never commit to `main`.
   The current branch is named in `HANDOFF.md`.
-- **Never push to GitHub.** The human handles all remote operations.
-  Local commits only.
+- **Ask before pushing to GitHub.** Local commits are free; `git push`,
+  `git push --force`, branch deletes on the remote, tag pushes, and any
+  `gh` command that mutates the remote (PR create/merge/close, release
+  create, etc.) all require an explicit per-action approval from the
+  human in the current turn. Read-only `gh` calls (`gh pr view`,
+  `gh run list`, etc.) do not require approval. Never push to `main`
+  directly; only phase branches get pushed, and `main` advances on the
+  remote only via a merged PR the human approves.
 - **Never implement future phases early. Never skip ahead** in the
   build plan. If you find yourself needing a future-phase capability,
   stop and ask.

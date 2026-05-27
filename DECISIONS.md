@@ -153,3 +153,26 @@ them here so a future session can revisit if any feel wrong.
     `index_fallback` when `usb_port` was available.
   - **Considered and rejected:** Letting the OS helper choose freely
     (risk of silent regressions).
+
+### 10. AI may push to GitHub, with per-action human approval
+
+- **Decided:** Reverse the original "never push to GitHub" rule. AI
+  sessions may run `git push` (and other remote-mutating commands like
+  `gh pr create`) provided they ask for and receive explicit approval
+  from the human in the same turn. Pushes to `main` are still
+  prohibited — only phase branches get pushed; `main` advances on the
+  remote only via a merged PR the human approves. Read-only `gh`
+  commands do not require approval.
+- **Why:** Now that the GitHub remote exists and SSH auth works
+  silently from this machine, having the human run every `git push`
+  by hand is friction without benefit. Per-action approval keeps the
+  human in the loop on anything destructive or visible to others,
+  while letting the AI close the "implement → commit → push" loop in
+  one turn instead of stopping for a hand-off.
+- **Considered and rejected:** Granting blanket push permission via
+  the Claude Code allowlist (loses the per-action sanity check — a
+  bad commit could ship before the human notices); keeping the
+  original total ban (proven to be unnecessary friction now that
+  auth is set up); letting the AI push to `main` directly with
+  approval (still wrong — phase-branch-only is a separate invariant
+  and shouldn't be relaxed at the same time).
