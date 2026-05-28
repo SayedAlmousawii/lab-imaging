@@ -20,5 +20,8 @@ config/cameras.json
 config/running_state.json
 config/settings.json
 
+# Local design reference exports
+design_handoff_lab_imaging/
+
 # Tracked: config/settings.json.example
 !config/settings.json.example

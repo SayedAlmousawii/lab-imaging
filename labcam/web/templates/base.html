@@ -7,16 +7,26 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
   <body>
-    <header class="site-header">
-      <a class="brand" href="/">Lab Imaging</a>
-      <nav aria-label="Primary">
-        <a href="/">Status</a>
-        <a href="/new">New experiment</a>
-      </nav>
-    </header>
-    <main class="page">
-      {% block content %}{% endblock %}
-    </main>
+    <div class="app">
+      <header class="topbar">
+        <a class="brand-mark" href="/">
+          <span class="glyph">LI</span>
+          Lab Imaging
+        </a>
+        <nav aria-label="Primary">
+          <a href="/" class="{% if request.endpoint == 'status_page' %}is-active{% endif %}">Station status</a>
+          <a href="/new" class="{% if request.endpoint == 'new_experiment_page' %}is-active{% endif %}">New experiment</a>
+        </nav>
+        <div class="spacer"></div>
+        <span class="live-pill" id="live-pill" hidden>
+          <span class="pulse"></span>
+          <span>Live · refreshed <span id="last-refresh">now</span></span>
+        </span>
+      </header>
+      <main class="page">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
     {% block scripts %}{% endblock %}
   </body>
 </html>

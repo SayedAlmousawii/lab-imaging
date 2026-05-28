@@ -225,3 +225,75 @@ them here so a future session can revisit if any feel wrong.
   list position (observed to swap camera identities); omitting metadata
   warnings entirely (would hide the durability limitation from later
   phases).
+
+## 2026-05-28 — Phase 3.5 redesign
+
+### 14. Phase 3.5 adopts the Claude Design dashboard redesign
+
+- **Decided:** Replace the Phase 3 plain-HTML dashboard with the
+  high-fidelity redesign from the local Claude Design handoff export.
+  Backend routes, polling cadence, debounce, and validation are
+  unchanged. Inter + JetBrains Mono are self-hosted under
+  `labcam/web/static/fonts/` (SIL OFL 1.1) so the dashboard remains
+  fully offline-capable. No CDN dependency, no build step, no JS
+  framework, no CSS framework — vanilla JS + Jinja2 retained.
+- **Why:** The Phase 3 table UI was hard to scan from across a lab
+  bench; the redesign makes the latest captured frame the visual
+  focus of each station card and surfaces health at a glance via a
+  summary strip. Doing it as a separate phase keeps the diff
+  reviewable and isolates "looks different" from "behaves
+  different" — backend code is untouched.
+- **Considered and rejected:** Hand-rolling a simpler CSS pass (loses
+  the design polish the redesign was commissioned for); pulling in a
+  CSS framework via CDN (adds a runtime dependency, breaks offline
+  operation on lab machines); loading Inter / JetBrains Mono via
+  Google Fonts (same offline objection); a server-side run-summary
+  endpoint mirroring `/api/experiments/name-check` (math is trivial
+  enough that the duplication risk is lower than the round-trip cost
+  on every keystroke).
+
+### 15. Run-summary storage estimate is a flat per-frame constant
+
+- **Decided:** The "Storage est." line in the new-experiment form
+  footer is computed client-side as `frames * 0.05 MB`, based on a
+  fresh measurement of the existing Phase 2/3 JPEG captures
+  (~45 KB/frame on the current Mac test cameras).
+- **Why:** Honest enough for an at-a-glance pre-flight estimate, and
+  cheap enough that no engine plumbing is needed. The figure can be
+  re-measured per-camera in a later phase if cameras at different
+  resolutions diverge sharply.
+- **Considered and rejected:** Keeping the handoff's 0.3 MB
+  placeholder (overstates by ~7×); per-camera live averages computed
+  from prior runs (over-engineered for v1); a server endpoint that
+  computes the estimate (round-trip on every keystroke for trivial
+  arithmetic).
+
+### 16. `/api/status` may add display-only fields for the redesigned UI
+
+- **Decided:** Phase 3.5 keeps the same Flask routes and capture
+  behaviour, but `/api/status` may include additive display-only
+  fields. The first such fields are `interval_minutes` and `ended_at`
+  so station cards can show truthful interval and finished-time
+  values.
+- **Why:** The redesigned card layout needs existing experiment
+  metadata that was already stored but not exposed in the status
+  payload. Adding read-only fields avoids misleading UI fallbacks
+  without changing engine lifecycle, storage, capture cadence, or any
+  route.
+- **Considered and rejected:** Hiding the finished/interval metrics
+  (loses useful status detail); reusing `next_capture_at` as a
+  finished time (misleading); adding a new endpoint (unnecessary for
+  two fields already available to `/api/status`).
+
+### 17. Claude Design handoff folder is local-only
+
+- **Decided:** `design_handoff_lab_imaging/` is gitignored. It may
+  stay on a developer machine as a reference export, but it is not
+  part of the tracked Phase 3.5 deliverable or runtime app.
+- **Why:** The exported prototype includes reference-only HTML/JS with
+  CDN links for design tooling. Tracking it would confuse the runtime
+  guarantee that the dashboard has no CDN dependency and no frontend
+  framework.
+- **Considered and rejected:** Tracking the full handoff folder
+  (useful reference, but misleading in the repo); deleting the folder
+  from disk (unnecessary and discards a handy local comparison target).

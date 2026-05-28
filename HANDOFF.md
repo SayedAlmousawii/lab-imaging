@@ -9,16 +9,21 @@ changed (write "no changes this session" explicitly under that date).
 
 ## Current state
 
-- **Current phase:** Phase 3 — local Flask dashboard implemented,
-  review notes fixed, and validated on the Mac dev machine; ready for
-  review.
-- **Current branch:** `phase-3-dashboard`.
+- **Current phase:** Phase 3.5 — dashboard UI redesign ported from
+  the Claude Design handoff into the existing Flask app. Route
+  contracts and capture behaviour unchanged; `/api/status` now has
+  additive display-only fields for interval and finished-at UI, and
+  the custom camera picker has basic keyboard support. Ready for
+  browser validation on real hardware.
+- **Current branch:** `phase-3.5-ui-redesign`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
   camera at index 2; it is excluded from the current lab camera mapping.
   The Codex app process still lacks macOS camera permission, but the
   approved Terminal can run the real-camera driver successfully.
-- **Next actions:** Review/merge Phase 3 dashboard branch.
+- **Next actions:** Browser-validate the redesigned UI on real
+  hardware, then review/merge Phase 3.5; then start Phase 4 Windows
+  verification.
 
 ---
 
@@ -270,3 +275,185 @@ changed (write "no changes this session" explicitly under that date).
   `/private/tmp/labcam-duplicate-name-warning.png`.
 - Dashboard was left running on port 5055 for the human to continue
   trying. No push was performed.
+
+### 2026-05-28 — Phase 3.5 UI redesign ported
+
+- Created branch `phase-3.5-ui-redesign` from `main` after Phase 3
+  merge.
+- Replaced `labcam/web/static/styles.css` with the Claude Design
+  handoff stylesheet (845 lines, production-ready) and prepended
+  `@font-face` blocks for self-hosted Inter (variable woff2) and
+  three weights of JetBrains Mono (Regular/Medium/SemiBold) under
+  `labcam/web/static/fonts/`. SIL OFL 1.1 license shipped alongside
+  the fonts at `labcam/web/static/fonts/OFL.txt`.
+- Rewrote `labcam/web/templates/base.html` with the `.topbar`
+  chrome (brand mark, active-nav hook driven by `request.endpoint`,
+  live indicator). Rewrote `labcam/web/templates/status.html` to
+  emit `.page-head` + `.summary` strip + `.station-grid` container,
+  with content filled client-side. Rewrote
+  `labcam/web/templates/new.html` as a `.config-grid` two-column
+  layout with `.card` form on the left (cam-picker, input-group
+  units, run-summary, hidden `camera_label` input preserved) and
+  `<aside class="preview">` panel on the right.
+- Rewrote `labcam/web/static/status.js` to render
+  `<article class="station" data-state="…">` cards per the
+  handoff's `StationCard`. Added `clientState()` mapper (covers
+  idle/running/done/error/offline; engine emits only the first
+  three today), `renderSummary()`, `updateLastRefreshLabel()`, and a
+  per-second tick for "Next in mm:ss" countdowns. Polling intervals
+  (10 s status, 3 s thumbnail) preserved.
+- Rewrote `labcam/web/static/new.js` to render `.cam` rows into a
+  hidden input, contextual `.note` banners (warn / danger / info)
+  under the picker, name input, and form footer, and `.ph-frame`
+  state transitions (empty / loading / success / error) for the
+  preview panel. `validatePayload()`, name-check 250 ms debounce, and
+  the `camera_busy` recovery path from Phase 3 preserved. Added
+  `updateRunSummary()`: frames = `floor(duration_h*60/interval_m)`,
+  finish ETA = now + duration, storage estimate = `frames * 0.05 MB`
+  (based on a fresh measurement of existing Phase 2/3 JPEGs at
+  ~45 KB/frame, not the handoff's 0.3 MB placeholder).
+- Backend untouched: no edits to `labcam/web/server.py`,
+  `labcam/engine/`, `labcam/cameras/`, or `requirements.txt`.
+- Created `specs/phase-3.5.md` (authoritative spec). Inserted
+  Phase 3.5 in `specs/05_BUILD_PLAN.md`. Added a deferral note to
+  `specs/phase-3.md`. Logged decisions #14 (adopt the redesign /
+  self-host fonts) and #15 (0.05 MB/frame storage estimate) in
+  `DECISIONS.md`. Updated `README.md` to note the self-hosted fonts
+  and offline behaviour.
+- Validation so far:
+  - `.venv/bin/python -m compileall labcam tools` reported no
+    errors.
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\.imshow" -n labcam tools` reports no matches.
+  - `rg "platform\.system|sys\.platform|os\.name" -n labcam tools`
+    reports only `labcam/cameras/interface.py`.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches; `requirements.txt` unchanged.
+- Browser hardware validation still pending — needs to be run from
+  the approved Terminal session because the Codex app process still
+  lacks macOS camera permission. No push performed.
+
+### 2026-05-28 — Phase 3.5 status payload display fields added
+
+- Added additive display-only fields to `/api/status` station objects
+  when an experiment exists:
+  - `interval_minutes`, copied from experiment metadata.
+  - `ended_at`, emitted for finished experiments and `null` for
+    running experiments.
+- Updated the redesigned status cards to use `interval_minutes` for
+  interval display and `ended_at` for the finished-card "Finished"
+  metric, with graceful `—` fallback if either field is unavailable.
+- Updated `specs/phase-3.5.md` to clarify that Phase 3.5 keeps
+  routes and capture behaviour unchanged while allowing additive
+  display-only fields on existing JSON payloads.
+- Logged decision #16 in `DECISIONS.md` for additive `/api/status`
+  display fields.
+- Validation passed:
+  - `.venv/bin/python -m compileall labcam tools`
+  - `node --check labcam/web/static/status.js`
+  - `node --check labcam/web/static/new.js`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+  - `rg "platform\\.system|sys\\.platform|os\\.name" -n labcam tools`
+    reports only `labcam/cameras/interface.py`.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches.
+- API smoke check passed through Flask's test client: a running
+  station returned `interval_minutes` and `ended_at=None`; a finished
+  station returned `interval_minutes` and a real ISO `ended_at`.
+- Browser hardware validation is still pending because no live server
+  was responding on `127.0.0.1:5055` during this session. No push was
+  performed.
+
+### 2026-05-28 — Phase 3.5 camera picker keyboard support added
+
+- Added keyboard support to the custom `/new` camera picker:
+  - The selected idle camera row is the tab stop.
+  - Busy camera rows remain visible but are not tab-focusable.
+  - `Enter` and `Space` select the focused idle camera.
+  - Arrow keys move and select among idle cameras while skipping busy
+    rows.
+  - `Home` and `End` jump and select the first/last idle camera.
+- Refined the first implementation after manual feedback: click,
+  Enter/Space, arrows, Home, and End now restore focus after the
+  picker re-renders, and keyboard behaviour follows the standard
+  radiogroup pattern more closely.
+- Added a focused-row style for `.cam:focus-visible` so keyboard focus
+  is visible inside the redesigned picker.
+- Preserved the hidden `camera_label` form payload, click selection,
+  busy-camera lockout, name-check debounce, and Preview/Start
+  validation behaviour.
+- Updated `specs/phase-3.5.md` to document the keyboard interaction.
+- Validation passed:
+  - `node --check labcam/web/static/new.js`
+  - `.venv/bin/python -m compileall labcam tools`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+  - `rg "platform\\.system|sys\\.platform|os\\.name" -n labcam tools`
+    reports only `labcam/cameras/interface.py`.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches.
+- Live browser keyboard walkthrough is still pending because no live
+  server was running for this session. No push was performed.
+
+### 2026-05-28 — Phase 3.5 design handoff folder ignored
+
+- Added `design_handoff_lab_imaging/` to `.gitignore`. The folder may
+  remain locally as a Claude Design reference export, but it is not
+  tracked and is not part of the runtime dashboard.
+- Updated `specs/phase-3.5.md`, `specs/05_BUILD_PLAN.md`, and
+  `README.md` to describe the handoff export as local reference
+  material only.
+- Logged decision #17 in `DECISIONS.md`: the prototype export is
+  gitignored because it can contain reference-only CDN React/Babel /
+  Google Fonts links, while the actual app remains offline-capable
+  Flask/Jinja/vanilla JS.
+- Verified `git status --short --branch` no longer lists
+  `design_handoff_lab_imaging/` as an untracked folder. No push was
+  performed.
+
+### 2026-05-28 — Phase 3.5 post-start duplicate warning suppressed
+
+- Fixed `/new` so a successful start does not immediately show the
+  duplicate-name warning for the exact camera/name that just started
+  while the name remains in the input.
+- The duplicate-name warning still appears when the user edits the
+  name or changes cameras and the selected camera/name would create a
+  suffixed folder.
+- Invalidated in-flight name-check responses on successful start so an
+  older duplicate check cannot repaint the warning after the success
+  message.
+- Preserved stale-tab and server-side busy-camera handling; this change
+  only suppresses the name-warning note for the just-started
+  camera/name pair.
+- Updated `specs/phase-3.5.md` to document the behaviour.
+- Validation passed:
+  - `node --check labcam/web/static/new.js`
+  - `.venv/bin/python -m compileall labcam tools`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+  - `rg "platform\\.system|sys\\.platform|os\\.name" -n labcam tools`
+    reports only `labcam/cameras/interface.py`.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches.
+- Live browser validation is still pending because no dashboard server
+  was responding at `127.0.0.1:5055/new` during this session. No push
+  was performed.
+
+### 2026-05-28 — Phase 3.5 status action underline removed
+
+- Fixed the status page "New experiment" action by adding
+  `text-decoration: none` to the shared `.btn` style. This also keeps
+  other anchor-backed buttons, such as `/new`'s "View status" action,
+  from inheriting browser link underlines.
+- Validation passed:
+  - `node --check labcam/web/static/new.js`
+  - `node --check labcam/web/static/status.js`
+  - Confirmed the `.btn` rule now includes `text-decoration: none`.
+- Live browser validation is still pending because no dashboard server
+  was responding at `127.0.0.1:5055/` during this session. No push was
+  performed.

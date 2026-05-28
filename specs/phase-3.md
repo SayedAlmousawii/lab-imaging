@@ -1,5 +1,11 @@
 # Phase 3 — Local Web Dashboard
 
+> **Note (post-Phase-3.5):** the UI styling and template/markup
+> described below have been superseded by `specs/phase-3.5.md`.
+> Backend contracts in this document (routes, JSON shapes, polling
+> cadence, debounce, validation, capture-lock behaviour) remain
+> authoritative.
+
 This is the authoritative spec for Phase 3 work. It consolidates the
 Phase 3 section of `05_BUILD_PLAN.md` with the architecture's
 "local-only dashboard" stance from `02_ARCHITECTURE.md` and the web

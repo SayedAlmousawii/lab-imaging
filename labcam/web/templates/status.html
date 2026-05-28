@@ -3,35 +3,33 @@
 {% block title %}Station Status - Lab Imaging{% endblock %}
 
 {% block content %}
-  <section class="page-heading">
-    <h1>Station status</h1>
-    <a class="primary-link" href="/new">New experiment</a>
-  </section>
+  <header class="page-head">
+    <div class="titles">
+      <div class="eyebrow">Workstation</div>
+      <h1>Station status</h1>
+      <div class="sub" id="page-sub">Loading stations…</div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-icon" type="button" id="refresh-btn" aria-label="Refresh">
+        <svg class="ic ic-16" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 9 16 9"/></svg>
+      </button>
+      <a class="btn is-accent btn-lg" href="/new">
+        <svg class="ic ic-16" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New experiment
+      </a>
+    </div>
+  </header>
 
-  <div id="status-message" class="message" role="status" hidden></div>
+  <div class="summary" id="summary">
+    <div class="cell"><div class="k">Running</div><div class="v"><span class="num">—</span></div></div>
+    <div class="cell"><div class="k">Frames captured</div><div class="v"><span class="num">—</span></div></div>
+    <div class="cell"><div class="k">Next capture</div><div class="v"><span class="num">—</span></div></div>
+    <div class="cell"><div class="k">Health</div><div class="v"><span class="num">—</span></div></div>
+  </div>
 
-  <section class="table-wrap" aria-label="Station status">
-    <table>
-      <thead>
-        <tr>
-          <th>Station</th>
-          <th>State</th>
-          <th>Identity</th>
-          <th>Experiment</th>
-          <th>Elapsed</th>
-          <th>Images</th>
-          <th>Remaining</th>
-          <th>Latest frame</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody id="status-table-body">
-        <tr>
-          <td colspan="9">Loading stations...</td>
-        </tr>
-      </tbody>
-    </table>
-  </section>
+  <div class="station-grid" id="station-grid">
+    <div class="note"><div class="body">Loading stations…</div></div>
+  </div>
 {% endblock %}
 
 {% block scripts %}
