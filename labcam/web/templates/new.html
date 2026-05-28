@@ -3,73 +3,158 @@
 {% block title %}New Experiment - Lab Imaging{% endblock %}
 
 {% block content %}
-  <section class="page-heading">
-    <h1>New experiment</h1>
-    <a class="secondary-link" href="/">View status</a>
-  </section>
-
-  <div id="form-message" class="message" role="status" hidden></div>
-
-  <form id="experiment-form" class="experiment-form">
-    <label>
-      Camera
-      <select id="camera-label" name="camera_label" required></select>
-    </label>
-
-    <label>
-      Experiment name
-      <input id="experiment-name" name="name" type="text" required autocomplete="off">
-    </label>
-    <p id="name-warning" class="inline-warning" role="status" hidden></p>
-
-    <div class="form-grid">
-      <label>
-        Interval, minutes
-        <input
-          id="interval-minutes"
-          name="interval_minutes"
-          type="number"
-          min="0.01"
-          step="0.01"
-          value="{{ default_interval_minutes }}"
-          required
-        >
-      </label>
-
-      <label>
-        Duration, hours
-        <input
-          id="duration-hours"
-          name="duration_hours"
-          type="number"
-          min="0.01"
-          step="0.01"
-          value="{{ default_duration_hours }}"
-          required
-        >
-      </label>
+  <header class="page-head">
+    <div class="titles">
+      <div class="eyebrow">Workstation</div>
+      <h1>New experiment</h1>
+      <div class="sub">Configure capture parameters and start a long-duration run.</div>
     </div>
-
-    <label>
-      Operator
-      <input id="operator" name="operator" type="text" autocomplete="name">
-    </label>
-
-    <label>
-      Notes
-      <textarea id="notes" name="notes" rows="4"></textarea>
-    </label>
-
-    <div class="button-row">
-      <button id="preview-button" type="button">Preview</button>
-      <button id="start-button" type="submit">Start</button>
+    <div class="actions">
+      <a class="btn" href="/">View status</a>
     </div>
-  </form>
+  </header>
 
-  <section class="preview-panel" aria-label="Preview image">
-    <img id="preview-image" alt="Latest preview" hidden>
-    <p id="preview-placeholder">No preview yet.</p>
-  </section>
+  <div class="config-grid">
+    <section class="card">
+      <header class="card-head">
+        <h2>Configure run</h2>
+        <span class="sub">All fields validated before start</span>
+      </header>
+
+      <form id="experiment-form" class="card-body">
+        <input type="hidden" id="camera-label" name="camera_label">
+
+        <div class="field">
+          <span class="lbl">Camera</span>
+          <div class="cam-picker" id="camera-picker" role="radiogroup" aria-label="Camera">
+            <div class="cam" aria-disabled="true">
+              <span class="cam-radio"></span>
+              <div class="cam-info">
+                <div class="cam-name">Loading cameras…</div>
+              </div>
+            </div>
+          </div>
+          <div id="camera-note" hidden></div>
+        </div>
+
+        <div class="field">
+          <label class="lbl" for="experiment-name">Experiment name</label>
+          <input
+            id="experiment-name"
+            class="input is-mono"
+            name="name"
+            type="text"
+            required
+            autocomplete="off"
+            placeholder="e.g. oil-water-column-tc-05"
+          >
+          <div id="name-note" hidden></div>
+          <span class="hint" id="name-hint">Used as the folder name. Letters, numbers, dashes.</span>
+        </div>
+
+        <div class="two-col">
+          <div class="field">
+            <label class="lbl" for="interval-minutes">Capture interval</label>
+            <div class="input-group">
+              <input
+                id="interval-minutes"
+                class="input is-mono"
+                name="interval_minutes"
+                type="number"
+                min="0.01"
+                step="0.01"
+                value="{{ default_interval_minutes }}"
+                required
+              >
+              <span class="unit">minutes</span>
+            </div>
+          </div>
+          <div class="field">
+            <label class="lbl" for="duration-hours">Total duration</label>
+            <div class="input-group">
+              <input
+                id="duration-hours"
+                class="input is-mono"
+                name="duration_hours"
+                type="number"
+                min="0.01"
+                step="0.01"
+                value="{{ default_duration_hours }}"
+                required
+              >
+              <span class="unit">hours</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="field">
+            <label class="lbl" for="operator">Operator <span class="opt">optional</span></label>
+            <input id="operator" class="input" name="operator" type="text" autocomplete="name" placeholder="Name or initials">
+          </div>
+          <div class="field">
+            <span class="lbl">Identity strategy</span>
+            <div id="identity-strategy" style="display:flex;align-items:center;height:36px;">
+              <span class="id-strategy mono">—</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="lbl" for="notes">Notes <span class="opt">optional</span></label>
+          <textarea
+            id="notes"
+            class="textarea"
+            name="notes"
+            placeholder="Sample, batch, conditions, anything the next reader should know."
+          ></textarea>
+        </div>
+
+        <div id="form-note" hidden></div>
+      </form>
+
+      <footer class="card-foot">
+        <div class="run-summary" id="run-summary">
+          <span><span class="lbl">Total frames</span> <span class="v" id="rs-frames">0</span></span>
+          <span class="sep">·</span>
+          <span><span class="lbl">Finishes ~</span> <span class="v" id="rs-finish">—</span></span>
+          <span class="sep">·</span>
+          <span><span class="lbl">Storage est.</span> <span class="v" id="rs-storage">0 MB</span></span>
+        </div>
+        <button class="btn" type="button" id="preview-button">
+          <svg class="ic ic-16" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+          Preview frame
+        </button>
+        <button class="btn is-accent" type="submit" form="experiment-form" id="start-button">
+          <svg class="ic ic-16" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+          Start capture
+        </button>
+      </footer>
+    </section>
+
+    <aside class="preview">
+      <header class="ph-head">
+        <span class="title">Live preview</span>
+        <span class="sub" id="preview-camera-label">—</span>
+        <div class="actions">
+          <button class="btn btn-sm" type="button" id="preview-recapture-button">
+            <svg class="ic ic-16" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 9 16 9"/></svg>
+            Capture
+          </button>
+        </div>
+      </header>
+      <div class="ph-frame is-empty" id="preview-frame" data-state="empty">
+        <div class="ph-state">
+          <svg class="ic ic-32 ico" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="1.8"/><polyline points="3 17 9 12 13 16 21 9"/></svg>
+          <strong>No preview yet</strong>
+          <span>Click <em>Preview frame</em> to capture from the selected camera.</span>
+        </div>
+      </div>
+      <footer class="ph-foot" id="preview-foot" hidden>
+        <span id="pf-time">—</span>
+      </footer>
+    </aside>
+  </div>
 {% endblock %}
 
 {% block scripts %}

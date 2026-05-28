@@ -31,3 +31,11 @@ python -m labcam.main
 By default the dashboard binds to `127.0.0.1` and has no authentication.
 If `allow_lan_access` is set to `true` in `config/settings.json`, it binds
 to the local network instead; use that only on a trusted lab network.
+
+The dashboard ships with self-hosted Inter and JetBrains Mono webfonts
+under `labcam/web/static/fonts/` (SIL OFL 1.1; license at
+`labcam/web/static/fonts/OFL.txt`). No CDN is contacted at runtime —
+the dashboard renders identically offline.
+
+If `design_handoff_lab_imaging/` exists locally, it is a gitignored
+Claude Design reference export only. It is not shipped runtime code.

@@ -218,6 +218,11 @@ def _station_status(engine: CaptureEngine) -> list[dict[str, Any]]:
         state = "running" if experiment.get("status") == "capturing" else "finished"
         started_at = _parse_iso(str(experiment.get("started_at")))
         planned_stop_at = _parse_iso(str(experiment.get("planned_stop_at")))
+        ended_at = (
+            _parse_iso(str(experiment.get("ended_at")))
+            if experiment.get("ended_at")
+            else None
+        )
         next_capture_at = (
             _parse_iso(str(experiment.get("next_capture_at")))
             if experiment.get("next_capture_at")
@@ -234,12 +239,18 @@ def _station_status(engine: CaptureEngine) -> list[dict[str, Any]]:
                 "warnings": camera.warnings,
                 "experiment_id": experiment.get("experiment_id"),
                 "experiment_name": experiment.get("name"),
+                "interval_minutes": experiment.get("interval_minutes"),
                 "elapsed_seconds": max(0, int((now - started_at).total_seconds())) if started_at else None,
                 "images_captured": experiment.get("images_captured"),
                 "remaining_seconds": (
                     max(0, int((planned_stop_at - now).total_seconds()))
                     if planned_stop_at and state == "running"
                     else 0
+                ),
+                "ended_at": (
+                    ended_at.isoformat(timespec="seconds")
+                    if ended_at and state != "running"
+                    else None
                 ),
                 "next_capture_at": next_capture_at.isoformat(timespec="seconds") if next_capture_at else None,
                 "latest_url": latest_url,

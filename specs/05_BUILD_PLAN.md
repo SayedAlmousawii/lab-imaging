@@ -71,6 +71,25 @@ Goal: control + monitor without touching code.
 - `main.py` — start engine + server together; one command.
 - **Deliverable:** full workflow through the browser on the Mac.
 
+## Phase 3.5 — Dashboard UI Polish / Redesign
+Goal: ship the Claude Design redesign of the Phase 3 dashboard without
+changing backend behaviour. See `specs/phase-3.5.md` for the
+authoritative spec.
+- Replace `labcam/web/static/styles.css` with the design-system
+  stylesheet; self-host Inter + JetBrains Mono under
+  `labcam/web/static/fonts/` (SIL OFL 1.1).
+- Rewrite `templates/base.html`, `templates/status.html`,
+  `templates/new.html`, `static/status.js`, `static/new.js` to the
+  new markup (topbar + summary strip + station card grid; config-grid
+  with cam-picker, input-group, run-summary, and preview aside).
+- All Flask routes, polling cadence (10 s status / 3 s thumbnail),
+  debounce, and validation rules unchanged. Engine code untouched.
+  Existing JSON payloads may gain additive display-only fields.
+- **Deliverable:** the four Phase 3 functional tests still pass
+  against the redesigned UI, plus visual parity with the local design
+  reference when available. The `design_handoff_lab_imaging/` export is
+  gitignored reference material, not shipped runtime code.
+
 ## Phase 4 — Windows Verification  ← mandatory before go-live
 Goal: confirm on the real target.
 - Implement/verify `cameras/identify_windows.py` (DirectShow, identity strategy
