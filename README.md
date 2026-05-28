@@ -19,6 +19,10 @@ pip install -r requirements.txt
 See `AGENTS.md` and `specs/` for the design. Start with
 `specs/00_README.md`.
 
+For Phase 4 Windows validation, use
+`specs/phase-4-windows-manual-validation.md` after pulling the
+`phase-4-windows-verification` branch on the Windows lab machine.
+
 ## Dashboard
 
 After camera setup has created `config/cameras.json`, start the local

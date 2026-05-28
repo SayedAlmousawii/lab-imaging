@@ -9,21 +9,19 @@ changed (write "no changes this session" explicitly under that date).
 
 ## Current state
 
-- **Current phase:** Phase 3.5 — dashboard UI redesign ported from
-  the Claude Design handoff into the existing Flask app. Route
-  contracts and capture behaviour unchanged; `/api/status` now has
-  additive display-only fields for interval and finished-at UI, and
-  the custom camera picker has basic keyboard support. Ready for
-  browser validation on real hardware.
-- **Current branch:** `phase-3.5-ui-redesign`.
+- **Current phase:** Phase 4 — Windows verification is ready to start.
+  Windows-ready camera support has been implemented locally and awaits
+  manual validation on the Windows lab machine.
+- **Current branch:** `phase-4-windows-verification`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
   camera at index 2; it is excluded from the current lab camera mapping.
   The Codex app process still lacks macOS camera permission, but the
   approved Terminal can run the real-camera driver successfully.
-- **Next actions:** Browser-validate the redesigned UI on real
-  hardware, then review/merge Phase 3.5; then start Phase 4 Windows
-  verification.
+- **Next actions:** Push the Phase 4 branch only after human approval,
+  then clone/pull it on Windows and run
+  `specs/phase-4-windows-manual-validation.md`. Paste back the command
+  outputs and `config/cameras.json` identity strategies.
 
 ---
 
@@ -457,3 +455,38 @@ changed (write "no changes this session" explicitly under that date).
 - Live browser validation is still pending because no dashboard server
   was responding at `127.0.0.1:5055/` during this session. No push was
   performed.
+
+### 2026-05-28 — Handoff reconciled after Phase 3.5 merge
+
+- Verified the local checkout is clean on `main` and matches
+  `origin/main`.
+- Verified `main` contains merge commit `9bae6e4` from PR #4,
+  `phase-3.5-ui-redesign`.
+- Updated current state to show Phase 4 as the next phase to start.
+- No code changes were made. No push was performed.
+
+### 2026-05-28 — Phase 4 Windows-ready implementation
+
+- Created branch `phase-4-windows-verification`.
+- Added Windows camera enumeration in `labcam/cameras/identify_windows.py`
+  using DirectShow metadata via a Windows-only `pywin32` dependency.
+- Added DirectShow capture backend selection through
+  `labcam/cameras/base_capture.py` and wired Windows enumeration in
+  `labcam/cameras/interface.py`.
+- Updated camera resolution so configured non-`index_fallback` cameras
+  re-resolve by `identity_strategy` + `stable_id` under the global
+  capture lock before capture.
+- Added `specs/phase-4-windows-manual-validation.md` with the exact
+  PowerShell commands and outputs to paste back from Windows; linked it
+  from `specs/phase-4.md` and `README.md`.
+- Logged decision #18 for DirectShow metadata + `pywin32`.
+- Validation passed on macOS:
+  - `.venv/bin/python -m compileall labcam tools`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+  - `rg "platform\\.system|sys\\.platform|os\\.name" -n labcam tools`
+    reports only `labcam/cameras/interface.py`.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches.
+- Real Windows hardware validation is pending. No push was performed.

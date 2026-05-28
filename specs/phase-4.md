@@ -35,6 +35,11 @@ nothing above that boundary should change.
    below with pass/fail and any observations. This report is the
    green-light artifact for go-live.
 
+3. **Manual Windows validation checklist** —
+   `specs/phase-4-windows-manual-validation.md` contains the exact
+   PowerShell commands and outputs to capture when Codex is not running
+   on the Windows lab machine.
+
 ## Required test scenarios
 
 All scenarios run on a real Windows lab machine with the real webcams

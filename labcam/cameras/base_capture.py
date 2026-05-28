@@ -86,3 +86,6 @@ def save_jpeg_image(image: Any, output_path: Path, *, quality: int | None = None
 def macos_backend() -> int:
     return cv2.CAP_AVFOUNDATION
 
+
+def windows_backend() -> int:
+    return cv2.CAP_DSHOW

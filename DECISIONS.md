@@ -297,3 +297,23 @@ them here so a future session can revisit if any feel wrong.
 - **Considered and rejected:** Tracking the full handoff folder
   (useful reference, but misleading in the repo); deleting the folder
   from disk (unnecessary and discards a handy local comparison target).
+
+## 2026-05-28 — Phase 4 Windows readiness
+
+### 18. Windows camera enumeration uses DirectShow metadata with pywin32
+
+- **Decided:** Phase 4 uses a Windows-only `pywin32` dependency to read
+  DirectShow video-input device metadata, while OpenCV capture still
+  goes through `opencv-python-headless` and `cv2.CAP_DSHOW` inside
+  `labcam/cameras/`. Non-`index_fallback` configured cameras are
+  re-resolved by `identity_strategy` + `stable_id` before capture so a
+  changed OpenCV index can be corrected when Windows exposes stable
+  identity metadata.
+- **Why:** Phase 4 must prove real Windows identity behavior, including
+  reboot/replug survival and identical-camera disambiguation. The
+  existing `last_seen_index` alone is not durable enough for those
+  tests, but the fix belongs inside the camera boundary.
+- **Considered and rejected:** Using OpenCV indexes only (too weak for
+  Phase 4); importing Windows packages above `labcam/cameras/`
+  (violates the cross-platform boundary); adding a heavier WMI
+  dependency before testing whether DirectShow metadata is sufficient.
