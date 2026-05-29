@@ -10,18 +10,19 @@ changed (write "no changes this session" explicitly under that date).
 ## Current state
 
 - **Current phase:** Phase 4 — Windows verification is ready to start.
-  Windows-ready camera support has been implemented locally and awaits
-  manual validation on the Windows lab machine.
+  Windows-ready camera support has been implemented, and a CIM/PnP
+  metadata fallback has been added locally after the first Windows
+  validation output.
 - **Current branch:** `phase-4-windows-verification`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
   camera at index 2; it is excluded from the current lab camera mapping.
   The Codex app process still lacks macOS camera permission, but the
   approved Terminal can run the real-camera driver successfully.
-- **Next actions:** Push the Phase 4 branch only after human approval,
-  then clone/pull it on Windows and run
-  `specs/phase-4-windows-manual-validation.md`. Paste back the command
-  outputs and `config/cameras.json` identity strategies.
+- **Next actions:** Push the CIM/PnP metadata fallback only after human
+  approval, then pull it on Windows and rerun
+  `.\.venv\Scripts\python tools\camera_setup.py list` with the USB
+  webcam connected.
 
 ---
 
@@ -490,3 +491,24 @@ changed (write "no changes this session" explicitly under that date).
   - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
     matches.
 - Real Windows hardware validation is pending. No push was performed.
+
+### 2026-05-29 — Phase 4 Windows metadata fallback refined
+
+- Reviewed Windows validation output from the lab machine:
+  - OpenCV 4.13.0 reports `CAP_DSHOW=700`.
+  - `tools\camera_setup.py list` detected two usable OpenCV indexes but
+    still fell back to `identity_strategy="index_fallback"`.
+  - `Get-CimInstance Win32_PnPEntity` exposed the connected
+    `Logi C310 HD WebCam` and Surface camera PnP IDs, plus many
+    non-camera USB/audio/IR/controller records.
+- Updated `labcam/cameras/identify_windows.py` locally to use a
+  PowerShell CIM/PnP fallback when DirectShow metadata is unavailable,
+  preferring actual `MI_00` video-interface camera records and filtering
+  out microphone, hub, IR, controller, composite, keyboard, and mouse
+  records.
+- Validation passed on macOS:
+  - `.venv/bin/python -m compileall labcam tools`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+- Follow-up Windows pull/retest is pending. No push was performed.
