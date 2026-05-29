@@ -9,21 +9,19 @@ changed (write "no changes this session" explicitly under that date).
 
 ## Current state
 
-- **Current phase:** Phase 4 — Windows verification is ready to start.
-  Windows-ready camera support has been implemented. Windows CIM/PnP
-  metadata is visible, but it is not safely correlated to OpenCV index
-  order on the current Surface + Logitech test setup, so the next patch
-  keeps this setup on honest `index_fallback` mappings.
+- **Current phase:** Phase 4 — Windows verification is in progress.
+  The Windows Logitech C310 path has passed setup and 100-cycle
+  open-grab-close stress testing, and the dashboard smoke test is
+  passing, using an honest `index_fallback` mapping.
 - **Current branch:** `phase-4-windows-verification`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
   camera at index 2; it is excluded from the current lab camera mapping.
   The Codex app process still lacks macOS camera permission, but the
   approved Terminal can run the real-camera driver successfully.
-- **Next actions:** Push the safer Windows metadata fallback only after
-  human approval, then pull it on Windows and rerun setup with
-  `--indexes` for the target cameras; use the preview images as the
-  source of truth for labels.
+- **Next actions:** Continue the remaining Phase 4 scenarios as
+  hardware is available, especially reboot/replug survival and
+  identical-camera disambiguation.
 
 ---
 
@@ -516,4 +514,29 @@ changed (write "no changes this session" explicitly under that date).
   - `rg "import cv2|from cv2" -n labcam tools` reports only
     `labcam/cameras/base_capture.py`.
   - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
-- Follow-up Windows pull/retest is pending. No push was performed.
+- Follow-up commit `a0f1b23` was pushed to
+  `origin/phase-4-windows-verification`.
+
+### 2026-05-29 — Windows Logitech setup and stress test passed
+
+- Windows retest after pulling the safer metadata fallback:
+  - `tools\camera_setup.py list` detected one usable OpenCV index at
+    the time of the test: `camera-0`, `identity_strategy="index_fallback"`.
+    The warning listed CIM metadata names for `Logi C310 HD WebCam` and
+    `Surface Camera Front`, but did not assign unsafe hardware IDs.
+  - Setup was run with `tools\camera_setup.py setup --indexes 1` after
+    preview testing showed the Logitech on OpenCV index 1.
+  - Generated `config\cameras.json` maps label `logi` to
+    `identity_strategy="index_fallback"`, `stable_id="1"`,
+    `last_seen_index=1`.
+  - `tools\camera_setup.py stress-test --indexes 1 --cycles 100`
+    passed 100/100 captures.
+- DirectShow warnings are still emitted during index probing, but the
+  target Logitech capture path succeeded.
+- Dashboard smoke test with the `logi` mapping passed on Windows.
+- Remaining Phase 4 identity scenarios are not fully proven because the
+  current Windows setup uses `index_fallback`: reboot survival, replug
+  survival, and identical-device disambiguation still need either
+  stronger camera identity correlation or the final multi-camera lab
+  hardware.
+- No push was performed.
