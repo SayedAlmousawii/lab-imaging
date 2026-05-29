@@ -20,7 +20,9 @@ changed (write "no changes this session" explicitly under that date).
   The Codex app process still lacks macOS camera permission, but the
   approved Terminal can run the real-camera driver successfully.
 - **Next actions:** Start Phase 5 on macOS with hardening/docs polish
-  that can be simulated locally. Return to Windows only for
+  that can be simulated locally. Four focused implementation specs now
+  exist for station health, disk-full handling, clean shutdown, and
+  lab-staff README/defaults. Return to Windows only for
   hardware-specific validation such as disconnect/replug, reboot
   survival, and final lab-machine smoke tests. Post-Phase-4 usability
   features are deferred to Phase 6.
@@ -568,3 +570,17 @@ changed (write "no changes this session" explicitly under that date).
 - Logged decisions #19 and #20 in `DECISIONS.md`.
 - Updated `specs/05_BUILD_PLAN.md`, `specs/phase-5.md`,
   `specs/phase-6.md`, and `specs/post-phase4-brainstorm.md`.
+
+### 2026-05-29 — Phase 5 task specs written
+
+- Wrote and committed four focused Phase 5 implementation specs, one
+  commit per spec:
+  - `specs/phase-5-task-1-station-health.md`
+  - `specs/phase-5-task-2-disk-full.md`
+  - `specs/phase-5-task-3-clean-shutdown.md`
+  - `specs/phase-5-task-4-lab-readme-defaults.md`
+- Confirmed the docs keep Phase 5 hardening-only and defer startup
+  camera verification, dashboard camera configuration, settings UI,
+  experiment browser, post-experiment notes, maintenance mode, and live
+  preview to Phase 6.
+- No runtime code changes were made.
