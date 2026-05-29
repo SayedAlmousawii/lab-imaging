@@ -30,6 +30,7 @@ def list_windows_cameras() -> list[CameraInfo]:
 
     if len(devices) != len(working_indexes):
         devices = _cim_camera_devices()
+        return [_index_fallback_camera(index, devices) for index in working_indexes]
 
     if len(devices) != len(working_indexes):
         return [_index_fallback_camera(index, devices) for index in working_indexes]
@@ -282,7 +283,9 @@ def _index_fallback_camera(index: int, devices: list[_DirectShowDevice]) -> Came
         "to OpenCV index; not durable across reboots or replugging"
     )
     if names:
-        warning = f"{warning}; detected metadata names: {', '.join(names)}"
+        sources = sorted({device.source for device in devices if device.source.strip()})
+        source_text = f" from {', '.join(sources)}" if sources else ""
+        warning = f"{warning}; detected metadata names{source_text}: {', '.join(names)}"
 
     return CameraInfo(
         label=f"camera-{index}",

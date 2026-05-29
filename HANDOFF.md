@@ -10,19 +10,20 @@ changed (write "no changes this session" explicitly under that date).
 ## Current state
 
 - **Current phase:** Phase 4 — Windows verification is ready to start.
-  Windows-ready camera support has been implemented, and a CIM/PnP
-  metadata fallback has been added locally after the first Windows
-  validation output.
+  Windows-ready camera support has been implemented. Windows CIM/PnP
+  metadata is visible, but it is not safely correlated to OpenCV index
+  order on the current Surface + Logitech test setup, so the next patch
+  keeps this setup on honest `index_fallback` mappings.
 - **Current branch:** `phase-4-windows-verification`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
   camera at index 2; it is excluded from the current lab camera mapping.
   The Codex app process still lacks macOS camera permission, but the
   approved Terminal can run the real-camera driver successfully.
-- **Next actions:** Push the CIM/PnP metadata fallback only after human
-  approval, then pull it on Windows and rerun
-  `.\.venv\Scripts\python tools\camera_setup.py list` with the USB
-  webcam connected.
+- **Next actions:** Push the safer Windows metadata fallback only after
+  human approval, then pull it on Windows and rerun setup with
+  `--indexes` for the target cameras; use the preview images as the
+  source of truth for labels.
 
 ---
 
@@ -506,6 +507,10 @@ changed (write "no changes this session" explicitly under that date).
   preferring actual `MI_00` video-interface camera records and filtering
   out microphone, hub, IR, controller, composite, keyboard, and mouse
   records.
+- After the USB webcam was connected, setup previews showed the CIM/PnP
+  metadata order was flipped relative to OpenCV indexes on this machine.
+  The patch was tightened to keep CIM/PnP metadata as warning context
+  only and avoid assigning wrong `hardware_id` values to OpenCV indexes.
 - Validation passed on macOS:
   - `.venv/bin/python -m compileall labcam tools`
   - `rg "import cv2|from cv2" -n labcam tools` reports only
