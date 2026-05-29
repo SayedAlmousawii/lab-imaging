@@ -9,7 +9,21 @@ from labcam.engine.storage import ExperimentPaths
 
 
 ExperimentStatus = Literal["idle", "capturing", "finished", "stopped", "failed"]
-EndReason = Literal["completed", "stopped_early", "unknown", "baseline_failed"]
+EndReason = Literal[
+    "completed",
+    "stopped_early",
+    "unknown",
+    "baseline_failed",
+    "disk_full",
+    "storage_failed",
+]
+HealthState = Literal[
+    "ok",
+    "identity_warning",
+    "capture_warning",
+    "capture_failing",
+    "camera_unavailable",
+]
 
 
 class EngineError(RuntimeError):
@@ -69,6 +83,10 @@ class Experiment:
     ended_at: datetime | None = None
     end_reason: str | None = None
     stop_requested: bool = False
+    consecutive_failures: int = 0
+    last_error_message: str | None = None
+    last_error_at: datetime | None = None
+    terminal_health_message: str | None = None
 
     @property
     def experiment_id(self) -> str:
@@ -99,6 +117,22 @@ class Experiment:
 
     def record_success(self) -> None:
         self.images_captured += 1
+        self.clear_capture_health()
+
+    def record_capture_failure(self, *, message: str, failed_at: datetime) -> None:
+        self.consecutive_failures += 1
+        self.last_error_message = message
+        self.last_error_at = failed_at
+
+    def clear_capture_health(self) -> None:
+        self.consecutive_failures = 0
+        self.last_error_message = None
+        self.last_error_at = None
+
+    def mark_terminal_health(self, *, message: str, failed_at: datetime) -> None:
+        self.terminal_health_message = message
+        self.last_error_message = message
+        self.last_error_at = failed_at
 
     def finalize(self, reason: EndReason | str, ended_at: datetime) -> None:
         self.ended_at = ended_at
@@ -133,14 +167,45 @@ class Experiment:
             "ended_at": self.ended_at.astimezone().isoformat(timespec="seconds") if self.ended_at else None,
             "end_reason": self.end_reason,
             "images_captured": self.images_captured,
+            "interval_minutes": self.config.interval_minutes,
             "next_capture_at": (
                 self.next_capture_at.astimezone().isoformat(timespec="seconds")
                 if self.next_capture_at
                 else None
             ),
+            "health_state": self.health_state(),
+            "health_message": self.health_message(),
+            "consecutive_failures": self.consecutive_failures,
+            "last_error_at": (
+                self.last_error_at.astimezone().isoformat(timespec="seconds")
+                if self.last_error_at
+                else None
+            ),
             "latest_frame_path": str(latest) if latest else None,
             "folder": str(self.paths.root),
         }
+
+    def health_state(self) -> HealthState:
+        if self.last_error_message and "not detected" in self.last_error_message.lower():
+            return "camera_unavailable"
+        if self.end_reason in {"disk_full", "storage_failed"}:
+            return "capture_failing"
+        if self.consecutive_failures >= 3:
+            return "capture_failing"
+        if self.consecutive_failures > 0:
+            return "capture_warning"
+        if self.camera_identity_strategy != "hardware_id":
+            return "identity_warning"
+        return "ok"
+
+    def health_message(self) -> str | None:
+        if self.terminal_health_message:
+            return self.terminal_health_message
+        if self.consecutive_failures > 0:
+            return self.last_error_message or "Camera is not responding. Check the USB connection."
+        if self.camera_identity_strategy != "hardware_id":
+            return "Camera identity may change if cameras are replugged. Verify preview before long runs."
+        return None
 
     def latest_frame_path(self) -> Path | None:
         from labcam.engine.storage import latest_image_path

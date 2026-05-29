@@ -63,9 +63,9 @@ def create_app(engine: CaptureEngine) -> Flask:
         except ActiveExperimentError as exc:
             return _error("camera_busy", str(exc), 409)
         except CameraConfigError as exc:
-            return _error("unknown_camera", str(exc), 400)
+            return _error("unknown_camera", _camera_config_message(exc), 400)
         except Exception as exc:
-            return _error("preview_failed", str(exc), 500)
+            return _error("preview_failed", _capture_message(exc), 500)
 
         return send_file(preview_path, mimetype="image/jpeg", max_age=0)
 
@@ -84,9 +84,9 @@ def create_app(engine: CaptureEngine) -> Flask:
         except BaselineCaptureError as exc:
             return _error("baseline_failed", str(exc), 500)
         except DiskSpaceError as exc:
-            return _error("disk_full", str(exc), 507)
+            return _error("disk_full", _disk_space_message(exc), 507)
         except CameraConfigError as exc:
-            return _error("unknown_camera", str(exc), 400)
+            return _error("unknown_camera", _camera_config_message(exc), 400)
         except EngineError as exc:
             return _error("invalid_request", str(exc), 400)
 
@@ -105,7 +105,7 @@ def create_app(engine: CaptureEngine) -> Flask:
         except StorageError as exc:
             return _error("invalid_name", str(exc), 400)
         except CameraConfigError as exc:
-            return _error("unknown_camera", str(exc), 400)
+            return _error("unknown_camera", _camera_config_message(exc), 400)
         return jsonify(preview)
 
     @app.post("/api/experiments/<experiment_id>/stop")
@@ -205,17 +205,23 @@ def _station_status(engine: CaptureEngine) -> list[dict[str, Any]]:
     for camera in engine.list_cameras():
         experiment = by_camera.get(camera.label)
         if experiment is None:
+            health_state = _idle_health_state(camera.identity_strategy)
             stations.append(
                 {
                     "camera_label": camera.label,
                     "state": "idle",
                     "identity_strategy": camera.identity_strategy,
                     "warnings": camera.warnings,
+                    "health_state": health_state,
+                    "health_message": _identity_health_message(camera.identity_strategy),
+                    "consecutive_failures": 0,
+                    "last_error_at": None,
                 }
             )
             continue
 
-        state = "running" if experiment.get("status") == "capturing" else "finished"
+        health_state = str(experiment.get("health_state") or _idle_health_state(camera.identity_strategy))
+        state = _station_state_for_health(experiment, health_state)
         started_at = _parse_iso(str(experiment.get("started_at")))
         planned_stop_at = _parse_iso(str(experiment.get("planned_stop_at")))
         ended_at = (
@@ -237,6 +243,11 @@ def _station_status(engine: CaptureEngine) -> list[dict[str, Any]]:
                 "state": state,
                 "identity_strategy": camera.identity_strategy,
                 "warnings": camera.warnings,
+                "health_state": health_state,
+                "health_message": experiment.get("health_message"),
+                "consecutive_failures": experiment.get("consecutive_failures"),
+                "last_error_at": experiment.get("last_error_at"),
+                "error_message": experiment.get("health_message"),
                 "experiment_id": experiment.get("experiment_id"),
                 "experiment_name": experiment.get("name"),
                 "interval_minutes": experiment.get("interval_minutes"),
@@ -283,6 +294,46 @@ def _sort_time(experiment: dict[str, Any]) -> datetime:
         or _parse_iso(str(experiment.get("ended_at")))
         or datetime.min.replace(tzinfo=timezone.utc)
     )
+
+
+def _idle_health_state(identity_strategy: str) -> str:
+    return "ok" if identity_strategy == "hardware_id" else "identity_warning"
+
+
+def _identity_health_message(identity_strategy: str) -> str | None:
+    if identity_strategy == "hardware_id":
+        return None
+    return "Camera identity may change if cameras are replugged. Verify preview before long runs."
+
+
+def _station_state_for_health(experiment: dict[str, Any], health_state: str) -> str:
+    if health_state == "camera_unavailable":
+        return "offline"
+    if health_state == "capture_failing":
+        return "error"
+    if experiment.get("status") == "capturing":
+        return "running"
+    if experiment.get("end_reason") in {"disk_full", "storage_failed"}:
+        return "error"
+    return "finished"
+
+
+def _camera_config_message(exc: Exception) -> str:
+    text = str(exc)
+    if "Missing" in text and "cameras.json" in text:
+        return "Camera setup has not been completed. Run the camera setup tool first."
+    return "That camera is not configured. Check camera setup and try again."
+
+
+def _capture_message(exc: Exception) -> str:
+    text = str(exc).lower()
+    if "open camera" in text or "read frame" in text or "not detected" in text:
+        return "Camera is not responding. Check the USB connection."
+    return "Could not capture a preview. Check the camera and try again."
+
+
+def _disk_space_message(exc: Exception) -> str:
+    return "Not enough free disk space for this experiment. Free space or shorten the run."
 
 
 def _error(code: str, message: str, status: int) -> Response:

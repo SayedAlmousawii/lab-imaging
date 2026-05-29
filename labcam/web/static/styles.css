@@ -548,6 +548,12 @@ body {
 .note .body strong { font-weight: 600; }
 .note .body .meta { color: inherit; opacity: .8; font-size: 11.5px; margin-top: 3px; display: block; }
 
+#system-alerts {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
 /* Summary strip above station grid */
 .summary {
   display: grid;
