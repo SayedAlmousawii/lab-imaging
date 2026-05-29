@@ -317,3 +317,39 @@ them here so a future session can revisit if any feel wrong.
   Phase 4); importing Windows packages above `labcam/cameras/`
   (violates the cross-platform boundary); adding a heavier WMI
   dependency before testing whether DirectShow metadata is sufficient.
+
+## 2026-05-29 — Phase 5 / Phase 6 scope split
+
+### 19. Phase 5 stays hardening-only; usability features move to Phase 6
+
+- **Decided:** Phase 5 remains limited to hardening, clearer error
+  surfacing, lab-staff documentation, safe defaults, and final v1
+  polish. The post-Phase-4 usability roadmap — startup camera
+  verification, dashboard camera configuration, settings, save-location
+  management, cloud-sync guidance, post-experiment notes, experiment
+  browser, maintenance mode, and any live-preview work — moves to a
+  new Phase 6 roadmap/spec track.
+- **Why:** Phase 5 is the reliability pass that gets the current v1 into
+  lab-staff hands. Mixing in workflow features would blur completion
+  criteria and risk changing capture behavior while we are still trying
+  to harden it.
+- **Considered and rejected:** Expanding Phase 5 to include all
+  dashboard usability work (too broad for a hardening phase); leaving
+  the brainstorm as an unsequenced note (too easy for future sessions to
+  implement features in the wrong phase).
+
+### 20. Continuous live preview remains out of Phase 5
+
+- **Decided:** Phase 5 preserves the current invariant that preview is a
+  fresh still captured through open-grab-close. Any continuous live
+  preview or maintenance-mode preview belongs to Phase 6 or later and
+  must explicitly revisit camera ownership, locking, and the
+  stills-not-video preview rule before implementation.
+- **Why:** The current architecture deliberately closes cameras between
+  captures and routes every capture path through a single process-wide
+  lock. Continuous preview would be a meaningful architecture change,
+  not a polish task.
+- **Considered and rejected:** Treating live preview as cosmetic UI
+  polish (it changes camera lifetime semantics); implementing it before
+  a new spec (would silently violate `AGENTS.md` and the Phase 3/5
+  preview constraints).

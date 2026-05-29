@@ -22,7 +22,8 @@ changed (write "no changes this session" explicitly under that date).
 - **Next actions:** Start Phase 5 on macOS with hardening/docs polish
   that can be simulated locally. Return to Windows only for
   hardware-specific validation such as disconnect/replug, reboot
-  survival, and final lab-machine smoke tests.
+  survival, and final lab-machine smoke tests. Post-Phase-4 usability
+  features are deferred to Phase 6.
 
 ---
 
@@ -552,3 +553,18 @@ changed (write "no changes this session" explicitly under that date).
   Logitech C310, but durable identity remains `index_fallback` on the
   current Surface + Logitech setup.
 - No code changes were made. No push was performed.
+
+### 2026-05-29 — Phase 5 / Phase 6 scope split logged
+
+- Reviewed `specs/post-phase4-brainstorm.md` with the human.
+- Decided Phase 5 remains hardening-only: reliability, clearer error
+  surfacing, lab-staff documentation, safe defaults, and final v1
+  polish.
+- Moved the remaining brainstorm features into a new Phase 6 holding
+  spec: startup camera verification, dashboard camera configuration,
+  settings, configurable save location, cloud-sync guidance,
+  post-experiment notes, experiment browser, maintenance mode, and
+  live-preview/repeated-preview investigation.
+- Logged decisions #19 and #20 in `DECISIONS.md`.
+- Updated `specs/05_BUILD_PLAN.md`, `specs/phase-5.md`,
+  `specs/phase-6.md`, and `specs/post-phase4-brainstorm.md`.

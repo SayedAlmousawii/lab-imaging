@@ -108,6 +108,19 @@ Goal: confirm on the real target.
 - Clear error surfacing in the dashboard (e.g. "Station 2 capture failing").
 - README finalized for lab staff (plain-language run instructions).
 - Sensible defaults in `settings.json`.
+- Phase 5 does not add new workflow features. Post-Phase-4 usability
+  ideas are tracked in Phase 6.
+
+## Phase 6 — Dashboard Workflow Features
+Goal: reduce dependence on Terminal/PowerShell and improve researcher
+workflow after the v1 hardening pass. See `specs/phase-6.md` for the
+holding spec.
+- Startup camera verification workflow.
+- Dashboard-based camera configuration and stress tests.
+- Settings page and configurable experiment save location.
+- Cloud-synced storage guidance while keeping capture local-first.
+- Post-experiment notes and experiment browser.
+- Maintenance mode and any live-preview/repeated-preview investigation.
 
 ## Out of Scope for v1 (Future Extensions)
 Documented so they're not accidentally built now, but designed-around:

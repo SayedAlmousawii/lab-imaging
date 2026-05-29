@@ -12,6 +12,10 @@ without supervision. Specifically: surface errors clearly, handle
 plausible real-world failure modes gracefully, write the lab-staff
 README, and finalize sensible defaults.
 
+Phase 5 is intentionally hardening-only. Post-Phase-4 usability and
+workflow features from `specs/post-phase4-brainstorm.md` are deferred to
+Phase 6 and tracked in `specs/phase-6.md`.
+
 ## Deliverables
 
 1. **Graceful handling of real-world failure modes.** For each item
@@ -88,6 +92,11 @@ README, and finalize sensible defaults.
 - **No new features beyond hardening and docs.** Phase 5 is not the
   place to add CV detection or auto-resume. Those are explicitly
   v2 territory.
+- **No Phase 6 workflow features.** Startup camera verification,
+  dashboard camera configuration, settings pages, configurable save
+  location, post-experiment notes, experiment browser, maintenance mode,
+  and live-preview changes are not part of Phase 5 unless the human
+  explicitly reopens the phase boundary.
 - **All fixes that touch OS / camera behavior stay inside
   `labcam/cameras/`.** Same boundary as always.
 - **Error messages are user-facing.** Audit every string a lab tech
