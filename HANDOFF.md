@@ -9,19 +9,20 @@ changed (write "no changes this session" explicitly under that date).
 
 ## Current state
 
-- **Current phase:** Phase 4 — Windows verification is in progress.
-  The Windows Logitech C310 path has passed setup and 100-cycle
-  open-grab-close stress testing, and the dashboard smoke test is
-  passing, using an honest `index_fallback` mapping.
-- **Current branch:** `phase-4-windows-verification`.
+- **Current phase:** Phase 5 — hardening and polish. Phase 4 Windows
+  readiness was merged after a partial Windows validation pass: Logitech
+  C310 setup, 100-cycle open-grab-close stress test, and dashboard smoke
+  test passed with an honest `index_fallback` mapping.
+- **Current branch:** `phase-5-hardening-polish`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
   camera at index 2; it is excluded from the current lab camera mapping.
   The Codex app process still lacks macOS camera permission, but the
   approved Terminal can run the real-camera driver successfully.
-- **Next actions:** Continue the remaining Phase 4 scenarios as
-  hardware is available, especially reboot/replug survival and
-  identical-camera disambiguation.
+- **Next actions:** Start Phase 5 on macOS with hardening/docs polish
+  that can be simulated locally. Return to Windows only for
+  hardware-specific validation such as disconnect/replug, reboot
+  survival, and final lab-machine smoke tests.
 
 ---
 
@@ -540,3 +541,14 @@ changed (write "no changes this session" explicitly under that date).
   stronger camera identity correlation or the final multi-camera lab
   hardware.
 - No push was performed.
+
+### 2026-05-29 — Phase 5 branch opened after Phase 4 merge
+
+- The human merged `phase-4-windows-verification`.
+- Updated local `main` from `origin/main` to merge commit `96a5838`.
+- Created branch `phase-5-hardening-polish` from updated `main`.
+- Updated current state to mark Phase 5 as active while preserving the
+  Phase 4 identity caveat: Windows capture reliability passed for the
+  Logitech C310, but durable identity remains `index_fallback` on the
+  current Surface + Logitech setup.
+- No code changes were made. No push was performed.
