@@ -11,17 +11,17 @@ changed (write "no changes this session" explicitly under that date).
 
 - **Current phase:** Phase 4 — Windows verification is in progress.
   The Windows Logitech C310 path has passed setup and 100-cycle
-  open-grab-close stress testing using an honest `index_fallback`
-  mapping.
+  open-grab-close stress testing, and the dashboard smoke test is
+  passing, using an honest `index_fallback` mapping.
 - **Current branch:** `phase-4-windows-verification`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
   camera at index 2; it is excluded from the current lab camera mapping.
   The Codex app process still lacks macOS camera permission, but the
   approved Terminal can run the real-camera driver successfully.
-- **Next actions:** Run the Windows dashboard smoke test with the
-  `logi` camera mapping, then continue the remaining Phase 4 scenarios
-  as hardware is available.
+- **Next actions:** Continue the remaining Phase 4 scenarios as
+  hardware is available, especially reboot/replug survival and
+  identical-camera disambiguation.
 
 ---
 
@@ -533,4 +533,10 @@ changed (write "no changes this session" explicitly under that date).
     passed 100/100 captures.
 - DirectShow warnings are still emitted during index probing, but the
   target Logitech capture path succeeded.
-- Dashboard smoke test is pending. No push was performed.
+- Dashboard smoke test with the `logi` mapping passed on Windows.
+- Remaining Phase 4 identity scenarios are not fully proven because the
+  current Windows setup uses `index_fallback`: reboot survival, replug
+  survival, and identical-device disambiguation still need either
+  stronger camera identity correlation or the final multi-camera lab
+  hardware.
+- No push was performed.
