@@ -115,9 +115,24 @@ to the current OpenCV index. Verify Preview after camera changes.
 ## Cloud Sync and Backups
 
 The app writes local files only and does not need internet access during
-capture. If the lab uses OneDrive, Google Drive Desktop, Dropbox, or a
-network backup tool, choose a normal local folder managed by that tool
-from **Settings**. Capture should always write to local storage first.
+capture. If the lab uses OneDrive, Google Drive Desktop, Dropbox,
+Synology Drive, or a network sync or backup tool, choose a normal local
+folder managed by that tool from **Settings**.
+
+Use this pattern:
+
+1. Choose a local folder on the lab computer, such as a folder inside
+   the local OneDrive, Google Drive Desktop, Dropbox, Synology Drive, or
+   network-sync directory.
+2. Start and run experiments normally. Lab Imaging writes each image,
+   `metadata.json`, and `capture_log.txt` to that local folder first.
+3. Let the existing sync software copy completed files in the
+   background after they are written.
+
+Do not rely on browser uploads, cloud web pages, or internet
+availability during active capture. If the internet or sync software is
+offline, experiments should keep capturing to the selected local folder;
+sync can catch up later.
 
 ## When to Call the Developer
 

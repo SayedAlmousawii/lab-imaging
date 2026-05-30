@@ -10,10 +10,11 @@ changed (write "no changes this session" explicitly under that date).
 ## Current state
 
 - **Current phase:** Phase 6 — dashboard workflow features. Phase 5 is
-  considered complete by the human. Phase 6 Task 1, Task 2, Task 3, and
-  Task 4, including dashboard hot-plug detection, detected-preview,
-  stale camera-row/preview/draft-input guards, the Settings page, and
-  configurable experiment save location, are implemented locally.
+  considered complete by the human. Phase 6 Task 1, Task 2, Task 3,
+  Task 4, and Task 5, including dashboard hot-plug detection,
+  detected-preview, stale camera-row/preview/draft-input guards, the
+  Settings page, configurable experiment save location, and
+  cloud-synced storage guidance, are implemented locally.
 - **Current branch:** `phase-6-dashboard-workflows`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
@@ -22,8 +23,7 @@ changed (write "no changes this session" explicitly under that date).
   approved Terminal can run the real-camera driver successfully. Manual
   Terminal-hosted post-fix stale-row/hot-plug preview and draft-input
   validation is pending.
-- **Next actions:** Implement Phase 6 Task 5: cloud-synced storage
-  guidance.
+- **Next actions:** Implement Phase 6 Task 6: post-experiment notes.
 
 ---
 
@@ -1052,6 +1052,42 @@ changed (write "no changes this session" explicitly under that date).
     matches.
   - `rg "platform\\.system|sys\\.platform|os\\.name" -n labcam tools`
     reports only `labcam/cameras/interface.py`.
+- Manual real-camera stale-row/hot-plug preview and draft-input
+  validation remains pending from Task 2 because the Codex app process
+  lacks macOS camera permission.
+- No push was performed.
+
+### 2026-05-31 — Phase 6 Task 5 cloud sync guidance implemented
+
+- Expanded the README Cloud Sync and Backups section with the supported
+  local-sync pattern: choose a normal local folder managed by OneDrive,
+  Google Drive Desktop, Dropbox, Synology Drive, or a network sync tool;
+  Lab Imaging writes local files first; existing sync software copies
+  files after they are written; experiments continue without internet.
+- Added a persistent Settings / Storage info note next to the
+  `experiments_dir` control. The note keeps cloud backup guidance
+  conservative and explicitly warns against browser uploads or
+  internet-dependent transfers during active capture.
+- Added `tools/phase6_task5_driver.py` to verify the Settings guidance,
+  README guidance, and absence of cloud/client dependencies in
+  `requirements.txt`.
+- No capture logic, settings schema, API, cloud credential handling,
+  sync status tracking, upload worker, or internet dependency was added.
+- Validation passed:
+  - `.venv/bin/python tools/phase6_task5_driver.py` passed 3/3
+    scenarios.
+  - `.venv/bin/python -m compileall labcam tools`
+  - `node --check labcam/web/static/settings.js`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches.
+  - `rg -n "onedrive|google.*drive|dropbox|synology|s3|ftp|oauth|token|upload worker|sync status" requirements.txt labcam tools README.md specs/phase-6-task-5-cloud-sync-guidance.md`
+    found only expected documentation/driver references plus existing
+    unrelated `token` variable names in `tools/phase2_driver.py`.
+  - Case-insensitive cloud-keyword grep confirmed the README and
+    Settings page contain the intended guidance.
 - Manual real-camera stale-row/hot-plug preview and draft-input
   validation remains pending from Task 2 because the Codex app process
   lacks macOS camera permission.
