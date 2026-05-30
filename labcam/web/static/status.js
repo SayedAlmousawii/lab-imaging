@@ -1,5 +1,6 @@
 const grid = document.querySelector("#station-grid");
 const summary = document.querySelector("#summary");
+const systemAlerts = document.querySelector("#system-alerts");
 const pageSub = document.querySelector("#page-sub");
 const livePill = document.querySelector("#live-pill");
 const lastRefreshEl = document.querySelector("#last-refresh");
@@ -85,6 +86,8 @@ function formatIntervalMinutes(value) {
 }
 
 function clientState(station) {
+  if (station.health_state === "camera_unavailable") return "offline";
+  if (station.health_state === "capture_failing") return "error";
   if (station.state === "running") return "running";
   if (station.state === "finished" || station.state === "completed") return "done";
   if (station.state === "error") return "error";
@@ -97,8 +100,8 @@ function stateLabel(state) {
     running: "Running",
     idle: "Idle",
     done: "Finished",
-    error: "Error",
-    offline: "Offline",
+    error: "Attention",
+    offline: "Unavailable",
   })[state] || "Idle";
 }
 
@@ -141,6 +144,29 @@ function identityNote(station) {
   `;
 }
 
+function healthNote(station) {
+  if (!station.health_message) return "";
+  const state = station.health_state || "ok";
+  if (state === "identity_warning") return "";
+  const tone = state === "capture_failing" || state === "camera_unavailable"
+    ? "is-danger"
+    : "is-warn";
+  const title = state === "capture_warning"
+    ? "Capture warning."
+    : state === "camera_unavailable"
+      ? "Camera unavailable."
+      : "Station needs attention.";
+  return `
+    <div class="note ${tone}">
+      ${state === "camera_unavailable" ? ICONS.plug : ICONS.alert}
+      <div class="body">
+        <strong>${escapeHtml(title)}</strong>
+        <span class="meta">${escapeHtml(station.health_message)}</span>
+      </div>
+    </div>
+  `;
+}
+
 function metricRow(station) {
   return `
     <div class="metric-row">
@@ -173,6 +199,7 @@ function runningBody(station) {
       <span class="spacer"></span>
       <button type="button" class="btn is-danger btn-sm" data-stop-id="${escapeHtml(station.experiment_id)}">${ICONS.square} Stop</button>
     </div>
+    ${healthNote(station)}
     ${identityNote(station)}
   `;
 }
@@ -221,8 +248,8 @@ function errorBody(station) {
     <div class="note is-danger">
       ${ICONS.alert}
       <div class="body">
-        <strong>Capture error.</strong>
-        <span class="meta">${escapeHtml(station.error_message || "An error was reported by the engine.")}</span>
+        <strong>${escapeHtml(station.end_reason === "disk_full" ? "Storage full." : station.end_reason === "storage_failed" ? "Storage problem." : "Capture error.")}</strong>
+        <span class="meta">${escapeHtml(station.error_message || station.health_message || "An error was reported by the engine.")}</span>
       </div>
     </div>
     <div class="station-foot">
@@ -239,7 +266,7 @@ function offlineBody(station) {
       ${ICONS.plug}
       <div class="body">
         <strong>Camera not detected.</strong>
-        <span class="meta">Check USB connection and replug if needed.</span>
+        <span class="meta">${escapeHtml(station.health_message || "Check USB connection and replug if needed.")}</span>
       </div>
     </div>
     ${identityNote(station)}
@@ -305,9 +332,12 @@ function renderSummary(stations) {
     ? `<span class="num">${escapeHtml(formatNextIn(new Date(nextCell.at).toISOString()))}</span><span class="of">${escapeHtml(nextCell.label)}</span>`
     : `<span class="num">—</span>`;
 
-  const fallbackCount = stations.filter((s) => s.identity_strategy && s.identity_strategy !== "hardware_id").length;
-  const healthCell = fallbackCount > 0
-    ? `<div class="v is-warn"><span class="num">${fallbackCount}</span><span class="of">camera${fallbackCount === 1 ? "" : "s"} need${fallbackCount === 1 ? "s" : ""} attention</span></div>`
+  const attentionCount = stations.filter((s) => {
+    const state = clientState(s);
+    return state === "error" || state === "offline" || s.health_state === "capture_warning" || s.health_state === "identity_warning";
+  }).length;
+  const healthCell = attentionCount > 0
+    ? `<div class="v is-warn"><span class="num">${attentionCount}</span><span class="of">station${attentionCount === 1 ? "" : "s"} need${attentionCount === 1 ? "s" : ""} attention</span></div>`
     : `<div class="v"><span class="num">OK</span></div>`;
 
   summary.innerHTML = `
@@ -335,6 +365,43 @@ function renderSummary(stations) {
   if (done) parts.push(`<span class="num">${done}</span> finished`);
   if (errored) parts.push(`<span class="num">${errored}</span> attention`);
   pageSub.innerHTML = parts.join(`<span class="dot-sep"> · </span>`);
+}
+
+function renderSystemAlerts(stations) {
+  const alerts = [];
+  const storageStation = stations.find((s) => s.end_reason === "disk_full" || s.end_reason === "storage_failed");
+  if (storageStation) {
+    alerts.push({
+      tone: "is-danger",
+      title: storageStation.end_reason === "disk_full" ? "Storage is full." : "Storage is not writable.",
+      message: storageStation.health_message || "Free space or check the results folder, then start a new run.",
+    });
+  }
+  const unavailable = stations.filter((s) => s.health_state === "camera_unavailable");
+  if (unavailable.length) {
+    alerts.push({
+      tone: "is-danger",
+      title: "One or more cameras are unavailable.",
+      message: "Check USB connections, then use Preview before starting a long run.",
+    });
+  }
+  const identityWarnings = stations.filter((s) => s.health_state === "identity_warning");
+  if (identityWarnings.length) {
+    alerts.push({
+      tone: "is-warn",
+      title: "Camera identity uses fallback mapping.",
+      message: "If cameras were replugged or the computer rebooted, verify previews before long runs.",
+    });
+  }
+  systemAlerts.innerHTML = alerts.map((alert) => `
+    <div class="note ${alert.tone}">
+      ${alert.tone === "is-danger" ? ICONS.alert : ICONS.info}
+      <div class="body">
+        <strong>${escapeHtml(alert.title)}</strong>
+        <span class="meta">${escapeHtml(alert.message)}</span>
+      </div>
+    </div>
+  `).join("");
 }
 
 function refreshNextInCounters() {
@@ -379,6 +446,7 @@ async function refreshStatus() {
       throw new Error(payload.error?.message || "Could not load station status");
     }
     lastStations = payload.stations || [];
+    renderSystemAlerts(lastStations);
     renderStations(lastStations);
     renderSummary(lastStations);
     lastRefreshAt = Date.now();

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import signal
 import sys
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,13 @@ def main() -> int:
         return 1
 
     engine = CaptureEngine(settings_path=DEFAULT_SETTINGS_PATH, cameras_path=DEFAULT_CAMERAS_PATH)
+    for camera in engine.list_cameras():
+        unavailable_message = engine.camera_unavailable_message(camera)
+        if unavailable_message:
+            print(
+                f"WARNING: {camera.label} is unavailable. {unavailable_message}",
+                file=sys.stderr,
+            )
     engine.start()
     app = create_app(engine)
 
@@ -38,11 +46,24 @@ def main() -> int:
         )
     print(f"Starting Lab Imaging dashboard on http://{host}:{port}")
 
+    _install_signal_handlers()
     try:
         app.run(host=host, port=port, debug=False, use_reloader=False)
+    except KeyboardInterrupt:
+        print("Stopping Lab Imaging dashboard cleanly.", file=sys.stderr)
     finally:
-        engine.shutdown()
+        engine.shutdown_cleanly()
     return 0
+
+
+def _install_signal_handlers() -> None:
+    def request_exit(signum: int, frame: object) -> None:
+        raise KeyboardInterrupt
+
+    for signal_name in ("SIGINT", "SIGTERM"):
+        signum = getattr(signal, signal_name, None)
+        if signum is not None:
+            signal.signal(signum, request_exit)
 
 
 def _load_or_create_settings() -> dict[str, Any]:

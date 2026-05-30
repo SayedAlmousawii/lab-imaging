@@ -9,19 +9,21 @@ changed (write "no changes this session" explicitly under that date).
 
 ## Current state
 
-- **Current phase:** Phase 4 — Windows verification is in progress.
-  The Windows Logitech C310 path has passed setup and 100-cycle
-  open-grab-close stress testing, and the dashboard smoke test is
-  passing, using an honest `index_fallback` mapping.
-- **Current branch:** `phase-4-windows-verification`.
+- **Current phase:** Phase 5 — hardening and polish implementation is
+  complete on macOS with deterministic simulated validation. Real
+  Windows hardware validation and a lab-staff README dry-run are still
+  required before marking v1 complete.
+- **Current branch:** `phase-5-hardening-polish`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
   camera at index 2; it is excluded from the current lab camera mapping.
   The Codex app process still lacks macOS camera permission, but the
   approved Terminal can run the real-camera driver successfully.
-- **Next actions:** Continue the remaining Phase 4 scenarios as
-  hardware is available, especially reboot/replug survival and
-  identical-camera disambiguation.
+- **Next actions:** Run the remaining Phase 5 go-live checks on the
+  Windows lab machine: camera disconnect/replug during a run, reboot /
+  index-fallback preview verification, dashboard smoke test, and a
+  cold lab-staff README read-through. Post-Phase-4 usability features
+  remain deferred to Phase 6.
 
 ---
 
@@ -539,4 +541,143 @@ changed (write "no changes this session" explicitly under that date).
   survival, and identical-device disambiguation still need either
   stronger camera identity correlation or the final multi-camera lab
   hardware.
+- No push was performed.
+
+### 2026-05-29 — Phase 5 branch opened after Phase 4 merge
+
+- The human merged `phase-4-windows-verification`.
+- Updated local `main` from `origin/main` to merge commit `96a5838`.
+- Created branch `phase-5-hardening-polish` from updated `main`.
+- Updated current state to mark Phase 5 as active while preserving the
+  Phase 4 identity caveat: Windows capture reliability passed for the
+  Logitech C310, but durable identity remains `index_fallback` on the
+  current Surface + Logitech setup.
+- No code changes were made. No push was performed.
+
+### 2026-05-29 — Phase 5 / Phase 6 scope split logged
+
+- Reviewed `specs/post-phase4-brainstorm.md` with the human.
+- Decided Phase 5 remains hardening-only: reliability, clearer error
+  surfacing, lab-staff documentation, safe defaults, and final v1
+  polish.
+- Moved the remaining brainstorm features into a new Phase 6 holding
+  spec: startup camera verification, dashboard camera configuration,
+  settings, configurable save location, cloud-sync guidance,
+  post-experiment notes, experiment browser, maintenance mode, and
+  live-preview/repeated-preview investigation.
+- Logged decisions #19 and #20 in `DECISIONS.md`.
+- Updated `specs/05_BUILD_PLAN.md`, `specs/phase-5.md`,
+  `specs/phase-6.md`, and `specs/post-phase4-brainstorm.md`.
+
+### 2026-05-29 — Phase 5 task specs written
+
+- Wrote and committed four focused Phase 5 implementation specs, one
+  commit per spec:
+  - `specs/phase-5-task-1-station-health.md`
+  - `specs/phase-5-task-2-disk-full.md`
+  - `specs/phase-5-task-3-clean-shutdown.md`
+  - `specs/phase-5-task-4-lab-readme-defaults.md`
+- Confirmed the docs keep Phase 5 hardening-only and defer startup
+  camera verification, dashboard camera configuration, settings UI,
+  experiment browser, post-experiment notes, maintenance mode, and live
+  preview to Phase 6.
+- No runtime code changes were made.
+
+### 2026-05-29 — Phase 5 hardening implemented and simulated
+
+- Implemented station health tracking in the capture engine:
+  consecutive scheduled-capture failures, sanitized lab-facing health
+  messages, health timestamps, and additive `/api/status` fields
+  (`health_state`, `health_message`, `consecutive_failures`,
+  `last_error_at`, `warnings`).
+- Updated the dashboard status page to surface identity warnings,
+  capture warnings/failures, unavailable cameras, and terminal storage
+  problems using the existing redesigned card states and a system-alert
+  banner area.
+- Implemented mid-run storage failure handling. Scheduled image save,
+  capture-log, metadata, or running-state write failures now stop only
+  the affected experiment with `end_reason="disk_full"` or
+  `end_reason="storage_failed"` when appropriate; ordinary camera
+  failures still retry, log a sequence gap, and continue.
+- Added clean shutdown semantics. `labcam.main` handles SIGINT/SIGTERM
+  and calls `CaptureEngine.shutdown_cleanly()`, which waits for active
+  capture work, finalizes running experiments as `stopped_early`, and
+  clears `running_state.json`. Startup crash recovery still marks true
+  stale state as `unknown`.
+- Converted root `README.md` into the lab-staff runbook and moved
+  developer setup, architecture notes, and validation commands into
+  `CONTRIBUTING.md`.
+- Reviewed `config/settings.json.example`; defaults remain unchanged:
+  `allow_lan_access=false`, `jpeg_quality=90`, `capture_retries=2`,
+  `default_interval_minutes=5`, `default_duration_hours=12`, and
+  `warmup_frames=5`.
+- Added `tools/phase5_driver.py` for deterministic simulated Phase 5
+  validation.
+- Validation passed:
+  - `.venv/bin/python -m compileall labcam tools`
+  - `node --check labcam/web/static/status.js`
+  - `node --check labcam/web/static/new.js`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches.
+  - `.venv/bin/python tools/phase2_driver.py --profile fast
+    --mock-capture --cameras station1 station2` passed 6/6 scenarios.
+  - `.venv/bin/python tools/phase5_driver.py` passed 12/12 scenarios.
+- Real Windows hardware validation is still pending for disconnect /
+  replug behavior, reboot/index-fallback preview verification, and final
+  lab-machine smoke testing. Lab-staff README dry-run is also pending.
+- No push was performed.
+
+### 2026-05-29 — Phase 5 review against spec
+
+- Reviewed current code against `HANDOFF.md`, `specs/phase-5.md`, and
+  all four Phase 5 task specs.
+- Re-ran deterministic validation:
+  - `.venv/bin/python -m compileall labcam tools`
+  - `node --check labcam/web/static/status.js`
+  - `node --check labcam/web/static/new.js`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches.
+  - `.venv/bin/python tools/phase5_driver.py` passed 12/12 scenarios.
+- No code changes were made. Findings were reported in chat.
+
+### 2026-05-29 — Phase 5 review findings fixed
+
+- Fixed idle configured-camera availability surfacing. The dashboard
+  status path now probes idle configured cameras through the camera
+  boundary and marks unavailable cameras as `camera_unavailable` /
+  `offline`; `labcam.main` prints a startup warning for unavailable
+  configured cameras.
+- Fixed clean shutdown waiting. `shutdown_cleanly()` now waits for the
+  scheduler/current capture path to finish before finalizing active
+  experiments as `stopped_early`.
+- Tightened storage-failure classification. Clear filesystem/storage
+  failures still stop the affected experiment with `disk_full` or
+  `storage_failed`; unclear JPEG-save exceptions now follow ordinary
+  capture retry / sequence-gap behavior.
+- Expanded `tools/phase5_driver.py` from 12 to 15 deterministic
+  scenarios to cover idle unavailable cameras, unclear save failures,
+  and clean shutdown waiting past the old five-second timeout.
+- Validation passed:
+  - `.venv/bin/python -m compileall labcam tools`
+  - `node --check labcam/web/static/status.js`
+  - `node --check labcam/web/static/new.js`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches.
+  - `rg "platform\\.system|sys\\.platform|os\\.name" -n labcam tools`
+    reports only `labcam/cameras/interface.py`.
+  - `.venv/bin/python tools/phase5_driver.py` passed 15/15 scenarios.
+  - `.venv/bin/python tools/phase2_driver.py --profile fast
+    --mock-capture --cameras station1 station2` passed 6/6 scenarios.
+- Real Windows hardware validation is still pending for disconnect /
+  replug behavior, reboot/index-fallback preview verification, and final
+  lab-machine smoke testing. Lab-staff README dry-run is also pending.
 - No push was performed.
