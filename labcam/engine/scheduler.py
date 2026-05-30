@@ -33,8 +33,10 @@ from labcam.engine.storage import (
     DEFAULT_EXPERIMENTS_DIR,
     DEFAULT_JPEG_QUALITY,
     append_log_line,
+    atomic_write_json,
     build_metadata,
     create_experiment_paths,
+    iso_timestamp,
     local_now,
     save_frame_as_jpeg,
     update_metadata_finalize,
@@ -66,6 +68,8 @@ class CameraRecord:
     stable_id: str
     last_seen_index: int
     warnings: list[str]
+    last_confirmed_at: str | None = None
+    last_confirmed_index: int | None = None
 
     def to_camera_info(self) -> CameraInfo:
         return CameraInfo(
@@ -135,6 +139,7 @@ class CaptureEngine:
         self._finished: dict[str, Experiment] = {}
         self._starting_cameras: set[str] = set()
         self._capturing_cameras: dict[str, int] = {}
+        self._verified_camera_labels: set[str] = set()
         self._lock = threading.RLock()
         self._wake = threading.Event()
         self._shutdown = threading.Event()
@@ -152,6 +157,7 @@ class CaptureEngine:
         )
         experiment_config.validate()
         camera = self._camera_record(experiment_config.camera_label)
+        self._ensure_camera_verified(camera.label)
         self._reserve_camera(camera.label)
 
         try:
@@ -243,23 +249,85 @@ class CaptureEngine:
     def list_cameras(self) -> list[CameraRecord]:
         return self._load_cameras()
 
+    def verification_required(self) -> bool:
+        cameras = self._load_cameras()
+        labels = {camera.label for camera in cameras}
+        with self._lock:
+            self._verified_camera_labels.intersection_update(labels)
+            return bool(labels) and self._verified_camera_labels != labels
+
+    def verification_status(self) -> dict[str, Any]:
+        cameras = self._load_cameras()
+        labels = {camera.label for camera in cameras}
+        with self._lock:
+            self._verified_camera_labels.intersection_update(labels)
+            verified = set(self._verified_camera_labels)
+
+        return {
+            "required": bool(labels) and verified != labels,
+            "complete": bool(labels) and verified == labels,
+            "cameras": [
+                {
+                    "label": camera.label,
+                    "identity_strategy": camera.identity_strategy,
+                    "stable_id": camera.stable_id,
+                    "last_seen_index": camera.last_seen_index,
+                    "warnings": camera.warnings,
+                    "identity_warning": camera.identity_strategy != "hardware_id",
+                    "last_confirmed_at": camera.last_confirmed_at,
+                    "last_confirmed_index": camera.last_confirmed_index,
+                    "confirmed": camera.label in verified,
+                }
+                for camera in cameras
+            ],
+        }
+
+    def confirm_camera(self, camera_label: str) -> dict[str, Any]:
+        camera = self._camera_record(camera_label)
+        self._capture_preview_frame(camera)
+        confirmed_at = self.now_func()
+        confirmed_at_iso = iso_timestamp(confirmed_at)
+
+        payload = self._load_camera_config_payload()
+        records = payload.get("cameras")
+        if not isinstance(records, list):
+            raise CameraConfigError(f"Expected cameras list in {self.cameras_path}")
+
+        updated = False
+        for record in records:
+            if isinstance(record, dict) and str(record.get("label")) == camera.label:
+                record["last_confirmed_at"] = confirmed_at_iso
+                record["last_confirmed_index"] = camera.last_seen_index
+                updated = True
+                break
+        if not updated:
+            raise CameraConfigError(f"Unknown camera label {camera.label!r}")
+
+        atomic_write_json(self.cameras_path, payload)
+        with self._lock:
+            self._verified_camera_labels.add(camera.label)
+        return self.verification_status()
+
     def preview(self, camera_label: str, *, output_dir: Path | None = None) -> Path:
         camera = self._camera_record(camera_label)
+        frame = self._capture_preview_frame(camera)
+        preview_dir = Path(output_dir) if output_dir is not None else Path(tempfile.gettempdir())
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        safe_label = "".join(
+            char if char.isalnum() or char in {"-", "_"} else "-"
+            for char in camera.label
+        ).strip("-") or "camera"
+        output_path = preview_dir / f"labcam-preview-{safe_label}.jpg"
+        return self.save_jpeg_func(frame, output_path, quality=self.jpeg_quality)
+
+    def _capture_preview_frame(self, camera: CameraRecord) -> Any:
         with self._lock:
             if self._capturing_cameras.get(camera.label, 0) > 0:
                 raise ActiveExperimentError(f"Camera {camera.label} is currently capturing")
             self._capturing_cameras[camera.label] = self._capturing_cameras.get(camera.label, 0) + 1
 
         try:
-            frame = self.preview_func(camera.to_camera_info())
-            preview_dir = Path(output_dir) if output_dir is not None else Path(tempfile.gettempdir())
-            preview_dir.mkdir(parents=True, exist_ok=True)
-            safe_label = "".join(
-                char if char.isalnum() or char in {"-", "_"} else "-"
-                for char in camera.label
-            ).strip("-") or "camera"
-            output_path = preview_dir / f"labcam-preview-{safe_label}.jpg"
-            return self.save_jpeg_func(frame, output_path, quality=self.jpeg_quality)
+            return self.preview_func(camera.to_camera_info())
         finally:
             with self._lock:
                 self._unmark_capturing(camera.label)
@@ -612,6 +680,14 @@ class CaptureEngine:
             self._ensure_camera_is_available(camera_label)
             self._starting_cameras.add(camera_label)
 
+    def _ensure_camera_verified(self, camera_label: str) -> None:
+        if not self.verification_required():
+            return
+        with self._lock:
+            if camera_label in self._verified_camera_labels:
+                return
+        raise EngineError("Confirm all configured cameras before starting experiments.")
+
     def _check_disk_space(self, config: ExperimentConfig) -> None:
         expected_images = math.ceil((config.duration_hours * 60) / config.interval_minutes) + 2
         required = expected_images * CONSERVATIVE_BYTES_PER_IMAGE
@@ -632,12 +708,7 @@ class CaptureEngine:
         raise CameraConfigError(f"Unknown camera label {camera_label!r}; configured labels: {labels}")
 
     def _load_cameras(self) -> list[CameraRecord]:
-        if not self.cameras_path.exists():
-            raise CameraConfigError(
-                f"Missing {self.cameras_path}; run tools/camera_setup.py setup first"
-            )
-        with self.cameras_path.open("r", encoding="utf-8") as file:
-            payload = json.load(file)
+        payload = self._load_camera_config_payload()
         records = payload.get("cameras")
         if not isinstance(records, list):
             raise CameraConfigError(f"Expected cameras list in {self.cameras_path}")
@@ -653,9 +724,30 @@ class CaptureEngine:
                     stable_id=str(record["stable_id"]),
                     last_seen_index=int(record["last_seen_index"]),
                     warnings=list(record.get("warnings") or []),
+                    last_confirmed_at=(
+                        str(record["last_confirmed_at"])
+                        if record.get("last_confirmed_at")
+                        else None
+                    ),
+                    last_confirmed_index=(
+                        int(record["last_confirmed_index"])
+                        if record.get("last_confirmed_index") is not None
+                        else None
+                    ),
                 )
             )
         return cameras
+
+    def _load_camera_config_payload(self) -> dict[str, Any]:
+        if not self.cameras_path.exists():
+            raise CameraConfigError(
+                f"Missing {self.cameras_path}; run tools/camera_setup.py setup first"
+            )
+        with self.cameras_path.open("r", encoding="utf-8") as file:
+            payload = json.load(file)
+        if not isinstance(payload, dict):
+            raise CameraConfigError(f"Expected camera config object in {self.cameras_path}")
+        return payload
 
     def _load_settings(self) -> dict[str, Any]:
         if not self.settings_path.exists():

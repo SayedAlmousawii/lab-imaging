@@ -384,3 +384,16 @@ them here so a future session can revisit if any feel wrong.
   edits (mixes original run metadata with later observations); an
   append-only note log (better audit trail, but heavier than needed for
   the initial dashboard note editor).
+
+### 23. Startup confirmation is session-scoped, with metadata as evidence
+
+- **Decided:** Phase 6 Task 1 confirmation resets for every app process.
+  `config/cameras.json` records `last_confirmed_at` and
+  `last_confirmed_index`, but those fields do not auto-unlock the next
+  startup session.
+- **Why:** The task requires operators to verify the current startup
+  session while still preserving useful evidence of the last confirmed
+  camera mapping.
+- **Considered and rejected:** Treating persisted confirmation metadata
+  as an automatic future unlock (too easy to miss a replug/index change);
+  storing confirmation only in memory (loses useful audit context).

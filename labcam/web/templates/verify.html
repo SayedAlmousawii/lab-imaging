@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Verify Cameras - Lab Imaging{% endblock %}
+
+{% block content %}
+  <header class="page-head">
+    <div class="titles">
+      <div class="eyebrow">Startup check</div>
+      <h1>Verify cameras</h1>
+      <div class="sub" id="verify-sub">Confirm each station before starting experiments.</div>
+    </div>
+    <div class="actions">
+      <a class="btn" href="/">
+        <svg class="ic ic-16" viewBox="0 0 24 24"><path d="M3 12h18"/><path d="m15 6 6 6-6 6"/></svg>
+        Station status
+      </a>
+    </div>
+  </header>
+
+  <div id="verify-alerts"></div>
+
+  <section class="verify-grid" id="verify-grid" aria-live="polite">
+    <div class="note"><div class="body">Loading cameras…</div></div>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='verify.js') }}"></script>
+{% endblock %}

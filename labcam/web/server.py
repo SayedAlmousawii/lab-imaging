@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from flask import Flask, Response, jsonify, render_template, request, send_file
+from flask import Flask, Response, jsonify, redirect, render_template, request, send_file, url_for
 
 from labcam.engine import (
     ActiveExperimentError,
@@ -24,16 +24,24 @@ def create_app(engine: CaptureEngine) -> Flask:
     app.config["LABCAM_ENGINE"] = engine
 
     @app.get("/")
-    def status_page() -> str:
+    def status_page() -> Response | str:
+        if engine.verification_required():
+            return redirect(url_for("verify_cameras_page"))
         return render_template("status.html")
 
     @app.get("/new")
-    def new_experiment_page() -> str:
+    def new_experiment_page() -> Response | str:
+        if engine.verification_required():
+            return redirect(url_for("verify_cameras_page"))
         return render_template(
             "new.html",
             default_interval_minutes=engine.settings.get("default_interval_minutes", 5),
             default_duration_hours=engine.settings.get("default_duration_hours", 12),
         )
+
+    @app.get("/verify-cameras")
+    def verify_cameras_page() -> str:
+        return render_template("verify.html")
 
     @app.get("/api/cameras")
     def api_cameras() -> Response:
@@ -68,6 +76,31 @@ def create_app(engine: CaptureEngine) -> Flask:
             return _error("preview_failed", _capture_message(exc), 500)
 
         return send_file(preview_path, mimetype="image/jpeg", max_age=0)
+
+    @app.get("/api/verification")
+    def api_verification() -> Response:
+        try:
+            status = engine.verification_status()
+        except CameraConfigError as exc:
+            return _error("missing_camera_config", str(exc), 500)
+        return jsonify(status)
+
+    @app.post("/api/verification/confirm")
+    def api_verification_confirm() -> Response:
+        payload = _json_payload()
+        camera_label = str(payload.get("camera_label") or "").strip()
+        if not camera_label:
+            return _error("missing_camera", "camera_label is required", 400)
+
+        try:
+            status = engine.confirm_camera(camera_label)
+        except ActiveExperimentError as exc:
+            return _error("camera_busy", str(exc), 409)
+        except CameraConfigError as exc:
+            return _error("unknown_camera", _camera_config_message(exc), 400)
+        except Exception as exc:
+            return _error("preview_failed", _capture_message(exc), 500)
+        return jsonify(status)
 
     @app.post("/api/experiments")
     def api_start_experiment() -> Response:
@@ -122,7 +155,10 @@ def create_app(engine: CaptureEngine) -> Flask:
 
     @app.get("/api/status")
     def api_status() -> Response:
-        return jsonify({"stations": _station_status(engine)})
+        return jsonify({
+            "stations": _station_status(engine),
+            "verification": engine.verification_status(),
+        })
 
     @app.get("/api/experiments/<experiment_id>/latest")
     def api_latest(experiment_id: str) -> Response:

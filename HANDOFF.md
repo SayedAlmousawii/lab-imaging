@@ -17,8 +17,8 @@ changed (write "no changes this session" explicitly under that date).
   camera at index 2; it is excluded from the current lab camera mapping.
   The Codex app process still lacks macOS camera permission, but the
   approved Terminal can run the real-camera driver successfully.
-- **Next actions:** Review the Phase 6 task specs, then implement Task
-  1: startup camera verification workflow.
+- **Next actions:** Implement Phase 6 Task 2: dashboard camera
+  configuration workflow.
 
 ---
 
@@ -696,3 +696,45 @@ changed (write "no changes this session" explicitly under that date).
 - Logged decisions #21 and #22 in `DECISIONS.md` for the Phase 6 task
   split and the `post_notes.txt` storage choice.
 - No runtime code changes were made. No push was performed.
+
+### 2026-05-31 — Phase 6 Task 1 startup verification implemented
+
+- Implemented the startup camera verification gate. `/` and `/new`
+  redirect to `/verify-cameras` until every configured station has been
+  confirmed in the current app process, and experiment start requests
+  are blocked until confirmation is complete.
+- Added the verification dashboard page and API:
+  `/api/verification`, `/api/verification/confirm`, and the existing
+  preview endpoint for fresh still previews.
+- Confirmation uses the existing preview capture path under the
+  process-wide capture lock, preserves open-grab-close camera behavior,
+  and writes `last_confirmed_at` plus `last_confirmed_index` to
+  `config/cameras.json` without changing the required camera fields.
+- Weak identity mappings are surfaced in the verification status and UI;
+  failed preview captures cannot confirm a station.
+- Updated `tools/phase5_driver.py` so existing simulated Phase 5
+  scenarios perform startup confirmation before starting mock
+  experiments under the new gate.
+- Added `tools/phase6_task1_driver.py` covering startup redirects,
+  strong identity confirmation, index-fallback warnings, unavailable
+  cameras, persisted confirmation metadata, and process-restart session
+  reset.
+- Logged decision #23 in `DECISIONS.md`: confirmation is session-scoped,
+  while persisted metadata is only evidence of the last confirmed
+  mapping.
+- Validation passed:
+  - `.venv/bin/python -m compileall labcam tools`
+  - `node --check labcam/web/static/verify.js`
+  - `node --check labcam/web/static/new.js`
+  - `node --check labcam/web/static/status.js`
+  - `.venv/bin/python tools/phase6_task1_driver.py` passed 5/5
+    scenarios.
+  - `.venv/bin/python tools/phase5_driver.py` passed 15/15 scenarios.
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches.
+- Browser plugin tooling was unavailable in this session and Playwright
+  was not installed, so UI verification was limited to Flask-rendered
+  page/API checks plus JavaScript syntax checks. No push was performed.

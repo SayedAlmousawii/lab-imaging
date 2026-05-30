@@ -463,6 +463,7 @@ def _engine(
     config: _TempConfig,
     *,
     capture_func: Callable[[CameraInfo], Any] | None = None,
+    preview_func: Callable[[CameraInfo], Any] | None = None,
     camera_check_func: Callable[[CameraInfo], None] | None = None,
     save_jpeg_func: Callable[..., Path] | None = None,
     disk_usage_func: Callable[[Path], shutil._ntuple_diskusage] = shutil.disk_usage,
@@ -472,6 +473,7 @@ def _engine(
         cameras_path=config.cameras_path,
         state_path=config.state_path,
         capture_func=capture_func or _capture_ok,
+        preview_func=preview_func or _capture_ok,
         camera_check_func=camera_check_func or _camera_check_ok,
         save_jpeg_func=save_jpeg_func or _save_jpeg,
         disk_usage_func=disk_usage_func,
@@ -480,6 +482,9 @@ def _engine(
 
 
 def _start(engine: CaptureEngine, camera_label: str, name: str) -> str:
+    for camera in engine.list_cameras():
+        if engine.verification_required():
+            engine.confirm_camera(camera.label)
     return engine.start_experiment(
         ExperimentConfig(
             name=name,

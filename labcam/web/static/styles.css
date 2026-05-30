@@ -866,6 +866,100 @@ body {
 }
 .preview .ph-foot .sep { color: var(--text-4); }
 
+/* ─────────────────────────────────────────
+   Startup camera verification
+   ───────────────────────────────────────── */
+.verify-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+@media (max-width: 980px) {
+  .verify-grid { grid-template-columns: 1fr; }
+}
+
+.verify-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: border-color var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease);
+}
+.verify-card:hover { border-color: var(--line-strong); }
+.verify-card.is-confirmed { box-shadow: inset 3px 0 0 var(--running); }
+
+.verify-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.verify-card-head h2 {
+  margin: 0 0 5px;
+  font: 600 14px/1.2 var(--font-sans);
+  color: var(--text-1);
+  letter-spacing: -.01em;
+}
+.verify-card-head .pill { margin-left: auto; flex: none; }
+.verify-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.verify-meta .sep { color: var(--text-4); }
+
+.verify-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--surface-sunk);
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+}
+.verify-frame .frame-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.verify-frame .ph-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+}
+.verify-frame.is-error { background: var(--danger-soft); }
+
+.verify-body {
+  padding: 14px 18px 0;
+  display: grid;
+  gap: 10px;
+}
+.verify-body:empty { display: none; }
+
+.verify-actions {
+  margin-top: auto;
+  padding: 14px 18px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+#verify-alerts {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
 /* Shimmer for loading state */
 .shimmer {
   position: absolute; inset: 0;
