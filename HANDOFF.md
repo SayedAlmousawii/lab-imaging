@@ -10,9 +10,10 @@ changed (write "no changes this session" explicitly under that date).
 ## Current state
 
 - **Current phase:** Phase 6 — dashboard workflow features. Phase 5 is
-  considered complete by the human. Phase 6 Task 1 and Task 2,
+  considered complete by the human. Phase 6 Task 1, Task 2, and Task 3,
   including dashboard hot-plug detection, detected-preview, and stale
-  camera-row/preview/draft-input guards, are implemented locally.
+  camera-row/preview/draft-input guards, plus the Settings page, are
+  implemented locally.
 - **Current branch:** `phase-6-dashboard-workflows`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
@@ -21,7 +22,8 @@ changed (write "no changes this session" explicitly under that date).
   approved Terminal can run the real-camera driver successfully. Manual
   Terminal-hosted post-fix stale-row/hot-plug preview and draft-input
   validation is pending.
-- **Next actions:** Implement Phase 6 Task 3: settings page.
+- **Next actions:** Implement Phase 6 Task 4: configurable experiment
+  save location.
 
 ---
 
@@ -949,5 +951,54 @@ changed (write "no changes this session" explicitly under that date).
     reports only `labcam/cameras/interface.py`.
 - Manual real-camera draft-input validation still needs to be run from
   the approved Terminal-hosted dashboard because the Codex app process
+  lacks macOS camera permission.
+- No push was performed.
+
+### 2026-05-31 — Phase 6 Task 3 settings page implemented
+
+- Added `/settings` and dashboard navigation for safe system settings.
+- Added `GET /api/settings` and `POST /api/settings`; settings are
+  merged with `config/settings.json.example` defaults, missing
+  `settings.json` is created from defaults, saves are atomic, and only
+  the safe v1 capture defaults are editable.
+- Editable settings are default interval minutes, default duration
+  hours, JPEG quality, capture retries, and warmup frames.
+- Settings saves are blocked with `settings_busy` while any experiment
+  is starting or running so active capture behavior cannot change
+  mid-run.
+- The Settings page shows read-only diagnostics: experiments directory,
+  settings path, camera config path, LAN access state, Python version,
+  OpenCV version, and git commit when available.
+- Exposed OpenCV version through `labcam/cameras/` so no code outside
+  the camera package imports OpenCV.
+- Added `tools/phase6_task3_driver.py` covering page render, defaults
+  merge, valid saves, invalid rejection, missing settings creation, and
+  active-experiment save blocking.
+- Appended Decision 24 documenting the active-run settings-save block.
+- Validation passed:
+  - `.venv/bin/python tools/phase6_task3_driver.py` passed 6/6
+    scenarios.
+  - `.venv/bin/python -m compileall labcam tools`
+  - `node --check labcam/web/static/settings.js`
+  - `node --check labcam/web/static/new.js`
+  - `node --check labcam/web/static/cameras.js`
+  - `node --check labcam/web/static/status.js`
+  - `.venv/bin/python tools/phase6_task2_driver.py` passed 9/9
+    scenarios.
+  - `.venv/bin/python tools/phase6_task1_driver.py` passed 5/5
+    scenarios.
+  - `.venv/bin/python tools/phase5_driver.py` passed 15/15 scenarios.
+  - `node --check tools/phase6_task2_browser_smoke.js`
+  - `node tools/phase6_task2_browser_smoke.js`
+  - `git diff --check`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches.
+  - `rg "platform\\.system|sys\\.platform|os\\.name" -n labcam tools`
+    reports only `labcam/cameras/interface.py`.
+- Manual real-camera stale-row/hot-plug preview and draft-input
+  validation remains pending from Task 2 because the Codex app process
   lacks macOS camera permission.
 - No push was performed.

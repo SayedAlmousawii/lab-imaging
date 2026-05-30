@@ -397,3 +397,18 @@ them here so a future session can revisit if any feel wrong.
 - **Considered and rejected:** Treating persisted confirmation metadata
   as an automatic future unlock (too easy to miss a replug/index change);
   storing confirmation only in memory (loses useful audit context).
+
+### 24. Settings saves are blocked during active experiments
+
+- **Decided:** Phase 6 Task 3 rejects dashboard settings saves while any
+  experiment is starting or running. Operators can still view settings
+  and diagnostics, but must stop active runs before changing capture
+  defaults.
+- **Why:** `capture_retries`, `jpeg_quality`, and `warmup_frames` feed
+  the live capture path. Blocking saves keeps Task 3 narrow and
+  guarantees active experiments are not accidentally changed mid-run.
+- **Considered and rejected:** Allowing all settings saves immediately
+  (could change active capture behavior); adding per-experiment settings
+  snapshots in this task (larger engine/storage change better reserved
+  for a dedicated need); allowing only form-default changes during active
+  runs (more complicated UI rules for little v1 benefit).

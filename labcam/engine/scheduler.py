@@ -46,6 +46,7 @@ from labcam.engine.storage import (
     write_metadata,
     StorageError,
 )
+from labcam.engine.settings import load_effective_settings
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -451,6 +452,18 @@ class CaptureEngine:
         with self._lock:
             experiments = list(self._active.values()) + list(self._finished.values())
             return [experiment.to_status() for experiment in experiments]
+
+    def has_active_experiments(self) -> bool:
+        with self._lock:
+            return bool(self._active or self._starting_cameras)
+
+    def reload_settings(self) -> dict[str, Any]:
+        settings = self._load_settings()
+        with self._lock:
+            self.settings = settings
+            self.capture_retries = int(settings.get("capture_retries", DEFAULT_CAPTURE_RETRIES))
+            self.jpeg_quality = int(settings.get("jpeg_quality", DEFAULT_JPEG_QUALITY))
+        return settings
 
     def latest_frame_path(self, experiment_id: str) -> Path | None:
         with self._lock:
@@ -902,13 +915,10 @@ class CaptureEngine:
         return payload
 
     def _load_settings(self) -> dict[str, Any]:
-        if not self.settings_path.exists():
-            return {}
-        with self.settings_path.open("r", encoding="utf-8") as file:
-            payload = json.load(file)
-        if not isinstance(payload, dict):
-            raise EngineError(f"Expected settings object in {self.settings_path}")
-        return payload
+        try:
+            return load_effective_settings(self.settings_path, create_missing=False)
+        except Exception as exc:
+            raise EngineError(str(exc)) from exc
 
 
 def _format_minutes(value: float) -> str:

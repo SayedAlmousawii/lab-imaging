@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from flask import Flask, Response, jsonify, redirect, render_template, request, send_file, url_for
 
+from labcam.cameras.interface import get_opencv_version
 from labcam.engine import (
     ActiveExperimentError,
     BaselineCaptureError,
@@ -15,6 +20,12 @@ from labcam.engine import (
     EngineError,
     ExperimentConfig,
     ExperimentNotFoundError,
+)
+from labcam.engine.scheduler import PROJECT_ROOT
+from labcam.engine.settings import (
+    SettingsError,
+    load_effective_settings,
+    save_editable_settings,
 )
 from labcam.engine.storage import StorageError, sanitize_name
 
@@ -46,6 +57,10 @@ def create_app(engine: CaptureEngine) -> Flask:
     @app.get("/cameras")
     def cameras_page() -> str:
         return render_template("cameras.html")
+
+    @app.get("/settings")
+    def settings_page() -> str:
+        return render_template("settings.html")
 
     @app.get("/verify-cameras")
     def verify_cameras_page() -> str:
@@ -237,6 +252,38 @@ def create_app(engine: CaptureEngine) -> Flask:
         if latest is None or not latest.exists():
             return _error("no_frame", "No captured frame is available yet", 404)
         return send_file(latest, mimetype="image/jpeg", max_age=0)
+
+    @app.get("/api/settings")
+    def api_settings() -> Response:
+        try:
+            settings = load_effective_settings(engine.settings_path, create_missing=True)
+            engine.reload_settings()
+        except SettingsError as exc:
+            return _error("settings_unavailable", str(exc), 500)
+        return jsonify(_settings_payload(engine, settings))
+
+    @app.post("/api/settings")
+    def api_save_settings() -> Response:
+        if engine.has_active_experiments():
+            return _error(
+                "settings_busy",
+                "Stop running experiments before changing capture settings.",
+                409,
+            )
+
+        payload = _json_payload()
+        try:
+            settings = save_editable_settings(engine.settings_path, payload)
+        except SettingsError as exc:
+            fields = _settings_error_fields(exc)
+            return _error(
+                "invalid_settings",
+                "Check the highlighted settings and try again.",
+                400,
+                fields=fields,
+            )
+        engine.reload_settings()
+        return jsonify(_settings_payload(engine, settings))
 
     return app
 
@@ -466,7 +513,63 @@ def _disk_space_message(exc: Exception) -> str:
     return "Not enough free disk space for this experiment. Free space or shorten the run."
 
 
-def _error(code: str, message: str, status: int) -> Response:
-    response = jsonify({"error": {"code": code, "message": message}})
+def _settings_payload(engine: CaptureEngine, settings: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "settings": settings,
+        "editable": [
+            "default_interval_minutes",
+            "default_duration_hours",
+            "jpeg_quality",
+            "capture_retries",
+            "warmup_frames",
+        ],
+        "diagnostics": {
+            "experiments_dir": str(engine.experiments_dir),
+            "settings_path": str(engine.settings_path),
+            "cameras_path": str(engine.cameras_path),
+            "allow_lan_access": bool(settings.get("allow_lan_access", False)),
+            "python_version": sys.version.split()[0],
+            "opencv_version": get_opencv_version(),
+            "git_commit": _git_commit(PROJECT_ROOT),
+        },
+        "active_experiments": engine.has_active_experiments(),
+    }
+
+
+def _settings_error_fields(exc: SettingsError) -> dict[str, str]:
+    try:
+        payload = json.loads(str(exc))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _git_commit(root: Path) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+    except Exception:
+        return None
+    commit = result.stdout.strip()
+    return commit if result.returncode == 0 and commit else None
+
+
+def _error(
+    code: str,
+    message: str,
+    status: int,
+    *,
+    fields: dict[str, str] | None = None,
+) -> Response:
+    payload: dict[str, Any] = {"error": {"code": code, "message": message}}
+    if fields:
+        payload["error"]["fields"] = fields
+    response = jsonify(payload)
     response.status_code = status
     return response

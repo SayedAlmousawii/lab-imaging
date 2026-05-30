@@ -12,6 +12,7 @@ from typing import Any, Literal
 from labcam.cameras.base_capture import (
     capture_open_grab_close,
     macos_backend,
+    opencv_version,
     save_jpeg_image,
     windows_backend,
 )
@@ -155,6 +156,10 @@ def check_camera_available(camera_id: int | str | CameraInfo) -> None:
 
 def save_jpeg(image: Any, output_path: str | Path, *, quality: int | None = None) -> Path:
     return save_jpeg_image(image, Path(output_path), quality=quality)
+
+
+def get_opencv_version() -> str:
+    return opencv_version()
 
 
 def _resolve_camera(camera_id: int | str | CameraInfo) -> CameraInfo:
