@@ -6,12 +6,20 @@ const settingsSub = document.querySelector("#settings-sub");
 const diagnosticsList = document.querySelector("#diagnostics-list");
 
 const fields = {
+  experiments_dir: document.querySelector("#experiments-dir"),
   default_interval_minutes: document.querySelector("#default-interval-minutes"),
   default_duration_hours: document.querySelector("#default-duration-hours"),
   jpeg_quality: document.querySelector("#jpeg-quality"),
   capture_retries: document.querySelector("#capture-retries"),
   warmup_frames: document.querySelector("#warmup-frames"),
 };
+const captureDefaultFields = new Set([
+  "default_interval_minutes",
+  "default_duration_hours",
+  "jpeg_quality",
+  "capture_retries",
+  "warmup_frames",
+]);
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
@@ -87,8 +95,12 @@ function renderDiagnostics(diagnostics) {
 function applyPayload(payload) {
   setFormValues(payload.settings || {});
   renderDiagnostics(payload.diagnostics || {});
+  const activeExperiments = Boolean(payload.active_experiments);
+  for (const [name, input] of Object.entries(fields)) {
+    input.disabled = activeExperiments && captureDefaultFields.has(name);
+  }
   settingsSub.textContent = payload.active_experiments
-    ? "Running experiments must be stopped before saving."
+    ? "Running experiments: storage changes apply to future runs."
     : "Ready.";
 }
 
@@ -112,6 +124,7 @@ async function loadSettings({ quiet = false } = {}) {
 
 function formPayload() {
   return {
+    experiments_dir: fields.experiments_dir.value,
     default_interval_minutes: fields.default_interval_minutes.value,
     default_duration_hours: fields.default_duration_hours.value,
     jpeg_quality: fields.jpeg_quality.value,

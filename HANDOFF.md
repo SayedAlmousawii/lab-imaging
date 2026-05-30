@@ -10,10 +10,10 @@ changed (write "no changes this session" explicitly under that date).
 ## Current state
 
 - **Current phase:** Phase 6 — dashboard workflow features. Phase 5 is
-  considered complete by the human. Phase 6 Task 1, Task 2, and Task 3,
-  including dashboard hot-plug detection, detected-preview, and stale
-  camera-row/preview/draft-input guards, plus the Settings page, are
-  implemented locally.
+  considered complete by the human. Phase 6 Task 1, Task 2, Task 3, and
+  Task 4, including dashboard hot-plug detection, detected-preview,
+  stale camera-row/preview/draft-input guards, the Settings page, and
+  configurable experiment save location, are implemented locally.
 - **Current branch:** `phase-6-dashboard-workflows`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
@@ -22,8 +22,8 @@ changed (write "no changes this session" explicitly under that date).
   approved Terminal can run the real-camera driver successfully. Manual
   Terminal-hosted post-fix stale-row/hot-plug preview and draft-input
   validation is pending.
-- **Next actions:** Implement Phase 6 Task 4: configurable experiment
-  save location.
+- **Next actions:** Implement Phase 6 Task 5: cloud-synced storage
+  guidance.
 
 ---
 
@@ -988,6 +988,60 @@ changed (write "no changes this session" explicitly under that date).
   - `.venv/bin/python tools/phase6_task1_driver.py` passed 5/5
     scenarios.
   - `.venv/bin/python tools/phase5_driver.py` passed 15/15 scenarios.
+  - `node --check tools/phase6_task2_browser_smoke.js`
+  - `node tools/phase6_task2_browser_smoke.js`
+  - `git diff --check`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches.
+  - `rg "platform\\.system|sys\\.platform|os\\.name" -n labcam tools`
+    reports only `labcam/cameras/interface.py`.
+- Manual real-camera stale-row/hot-plug preview and draft-input
+  validation remains pending from Task 2 because the Codex app process
+  lacks macOS camera permission.
+- No push was performed.
+
+### 2026-05-31 — Phase 6 Task 4 configurable save location implemented
+
+- Added editable `experiments_dir` storage controls to the Settings page.
+  The dashboard validates that the configured folder exists or can be
+  created, rejects file/non-directory paths, verifies write access with a
+  temporary file, and saves the operator-entered path to
+  `config/settings.json`.
+- Settings saves now allow save-location-only changes during active
+  experiments while keeping capture defaults locked until active runs
+  stop.
+- `CaptureEngine.reload_settings()` refreshes the future
+  `experiments_dir` for dashboard/app engines while preserving explicit
+  test/tool overrides. Active experiments keep writing through their
+  existing `Experiment.paths`.
+- New `running_state.json` entries include `experiment_folder`; startup
+  recovery prefers that stored folder and falls back to the old
+  `experiments_dir / experiment_id` lookup for compatibility.
+- Updated the README storage/backups wording and appended Decisions 25
+  and 26 for active-run save-location changes and stored experiment
+  folders in runtime state.
+- Added `tools/phase6_task4_driver.py` covering absolute and relative
+  paths, missing-folder creation, invalid/unwritable paths, active-run
+  old-folder preservation plus future-run new-folder use, restart
+  persistence, and startup recovery from an old folder.
+- Validation passed:
+  - `.venv/bin/python tools/phase6_task4_driver.py` passed 7/7
+    scenarios.
+  - `.venv/bin/python tools/phase6_task3_driver.py` passed 6/6
+    scenarios.
+  - `.venv/bin/python tools/phase6_task2_driver.py` passed 9/9
+    scenarios.
+  - `.venv/bin/python tools/phase6_task1_driver.py` passed 5/5
+    scenarios.
+  - `.venv/bin/python tools/phase5_driver.py` passed 15/15 scenarios.
+  - `.venv/bin/python -m compileall labcam tools`
+  - `node --check labcam/web/static/settings.js`
+  - `node --check labcam/web/static/new.js`
+  - `node --check labcam/web/static/cameras.js`
+  - `node --check labcam/web/static/status.js`
   - `node --check tools/phase6_task2_browser_smoke.js`
   - `node tools/phase6_task2_browser_smoke.js`
   - `git diff --check`

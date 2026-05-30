@@ -46,7 +46,7 @@ from labcam.engine.storage import (
     write_metadata,
     StorageError,
 )
-from labcam.engine.settings import load_effective_settings
+from labcam.engine.settings import load_effective_settings, resolve_experiments_dir
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -125,12 +125,16 @@ class CaptureEngine:
         self.settings_path = settings_path
         self.cameras_path = cameras_path
         self.settings = self._load_settings()
+        self._experiments_dir_override = experiments_dir is not None
         self.experiments_dir = (
             Path(experiments_dir)
             if experiments_dir is not None
-            else Path(self.settings.get("experiments_dir", DEFAULT_EXPERIMENTS_DIR))
+            else resolve_experiments_dir(
+                self.settings.get("experiments_dir", DEFAULT_EXPERIMENTS_DIR),
+                project_root=PROJECT_ROOT,
+            )
         )
-        if not self.experiments_dir.is_absolute():
+        if self._experiments_dir_override and not self.experiments_dir.is_absolute():
             self.experiments_dir = PROJECT_ROOT / self.experiments_dir
         self.experiments_dir = self.experiments_dir.resolve()
         self.state = RunningStateManager(state_path)
@@ -463,6 +467,11 @@ class CaptureEngine:
             self.settings = settings
             self.capture_retries = int(settings.get("capture_retries", DEFAULT_CAPTURE_RETRIES))
             self.jpeg_quality = int(settings.get("jpeg_quality", DEFAULT_JPEG_QUALITY))
+            if not self._experiments_dir_override:
+                self.experiments_dir = resolve_experiments_dir(
+                    settings.get("experiments_dir", DEFAULT_EXPERIMENTS_DIR),
+                    project_root=PROJECT_ROOT,
+                )
         return settings
 
     def latest_frame_path(self, experiment_id: str) -> Path | None:

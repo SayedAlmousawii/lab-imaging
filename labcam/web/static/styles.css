@@ -1058,6 +1058,35 @@ body {
   align-items: start;
 }
 
+.settings-section {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-section:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-head h2 {
+  margin: 0;
+  font: 600 14px/1.2 var(--font-sans);
+}
+
+.section-head .sub {
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
 .settings-triplet {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

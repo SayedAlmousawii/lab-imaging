@@ -23,6 +23,8 @@ from labcam.engine import (
 )
 from labcam.engine.scheduler import PROJECT_ROOT
 from labcam.engine.settings import (
+    CAPTURE_DEFAULT_SETTINGS,
+    EDITABLE_SETTINGS_ORDER,
     SettingsError,
     load_effective_settings,
     save_editable_settings,
@@ -264,18 +266,23 @@ def create_app(engine: CaptureEngine) -> Flask:
 
     @app.post("/api/settings")
     def api_save_settings() -> Response:
-        if engine.has_active_experiments():
-            return _error(
-                "settings_busy",
-                "Stop running experiments before changing capture settings.",
-                409,
-            )
-
+        active_experiments = engine.has_active_experiments()
         payload = _json_payload()
         try:
-            settings = save_editable_settings(engine.settings_path, payload)
+            settings = save_editable_settings(
+                engine.settings_path,
+                payload,
+                allow_capture_defaults=not active_experiments,
+            )
         except SettingsError as exc:
             fields = _settings_error_fields(exc)
+            if active_experiments and any(field in CAPTURE_DEFAULT_SETTINGS for field in fields):
+                return _error(
+                    "settings_busy",
+                    "Stop running experiments before changing capture defaults.",
+                    409,
+                    fields=fields,
+                )
             return _error(
                 "invalid_settings",
                 "Check the highlighted settings and try again.",
@@ -516,13 +523,7 @@ def _disk_space_message(exc: Exception) -> str:
 def _settings_payload(engine: CaptureEngine, settings: dict[str, Any]) -> dict[str, Any]:
     return {
         "settings": settings,
-        "editable": [
-            "default_interval_minutes",
-            "default_duration_hours",
-            "jpeg_quality",
-            "capture_retries",
-            "warmup_frames",
-        ],
+        "editable": list(EDITABLE_SETTINGS_ORDER),
         "diagnostics": {
             "experiments_dir": str(engine.experiments_dir),
             "settings_path": str(engine.settings_path),

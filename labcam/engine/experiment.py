@@ -149,6 +149,7 @@ class Experiment:
             raise EngineError(f"Experiment is missing next_capture_at: {self.experiment_id}")
         return {
             "experiment_id": self.experiment_id,
+            "experiment_folder": str(self.paths.root),
             "camera_label": self.config.camera_label,
             "next_capture_at": self.next_capture_at.astimezone().isoformat(timespec="seconds"),
             "planned_stop_at": self.planned_stop_at.astimezone().isoformat(timespec="seconds"),

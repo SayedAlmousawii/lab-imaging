@@ -44,6 +44,10 @@ By default, experiment folders are saved under:
 experiments\
 ```
 
+The save location can be changed from **Settings**. Changes apply only
+to future experiments; existing experiment folders stay where they were
+created.
+
 Each folder is named with the date, experiment name, and camera label.
 Inside the folder:
 
@@ -112,8 +116,8 @@ to the current OpenCV index. Verify Preview after camera changes.
 
 The app writes local files only and does not need internet access during
 capture. If the lab uses OneDrive, Google Drive Desktop, Dropbox, or a
-network backup tool, configure that outside Lab Imaging. Capture should
-always write to a normal local folder first.
+network backup tool, choose a normal local folder managed by that tool
+from **Settings**. Capture should always write to local storage first.
 
 ## When to Call the Developer
 

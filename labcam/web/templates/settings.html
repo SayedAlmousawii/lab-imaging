@@ -25,11 +25,24 @@
 
   <section class="settings-grid">
     <form id="settings-form" class="card">
-      <header class="card-head">
-        <h2>Capture defaults</h2>
-        <span class="sub">Future runs</span>
-      </header>
       <div class="card-body">
+        <section class="settings-section">
+          <header class="section-head">
+            <h2>Storage</h2>
+            <span class="sub">Future runs</span>
+          </header>
+          <div class="field" data-field="experiments_dir">
+            <label class="lbl" for="experiments-dir">Experiment folder</label>
+            <input id="experiments-dir" class="input is-mono" name="experiments_dir" type="text" autocomplete="off" required>
+            <span class="hint js-error" hidden></span>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <header class="section-head">
+            <h2>Capture defaults</h2>
+            <span class="sub">Future runs</span>
+          </header>
         <div class="two-col">
           <div class="field" data-field="default_interval_minutes">
             <label class="lbl" for="default-interval-minutes">Default interval</label>
@@ -66,6 +79,7 @@
             <span class="hint js-error" hidden></span>
           </div>
         </div>
+        </section>
       </div>
     </form>
 

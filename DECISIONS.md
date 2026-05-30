@@ -412,3 +412,31 @@ them here so a future session can revisit if any feel wrong.
   snapshots in this task (larger engine/storage change better reserved
   for a dedicated need); allowing only form-default changes during active
   runs (more complicated UI rules for little v1 benefit).
+
+### 25. Save-location changes are allowed during active experiments
+
+- **Decided:** Phase 6 Task 4 allows dashboard saves that change only
+  `experiments_dir` while experiments are running. Capture defaults
+  remain locked until active runs stop.
+- **Why:** A changed save location only affects future experiment
+  folders. Active experiments already hold their concrete output paths,
+  so continuing to block capture defaults is enough to avoid changing
+  live capture behavior.
+- **Considered and rejected:** Blocking all settings saves during active
+  runs (stricter than the Task 4 requirement); applying the new folder to
+  active experiments (would move or split a running dataset).
+
+### 26. Runtime state records active experiment folders
+
+- **Decided:** New `running_state.json` entries include
+  `experiment_folder` in addition to the existing experiment id and
+  timing fields. Startup recovery prefers that stored folder and falls
+  back to `experiments_dir / experiment_id` for older state files.
+- **Why:** The configured save location can now change while an
+  experiment is active. Recovery needs the actual folder chosen at
+  experiment start, not whichever folder is configured on the next app
+  startup.
+- **Considered and rejected:** Looking only under the current
+  `experiments_dir` during recovery (can miss active runs created in a
+  previous location); rewriting old state entries ahead of time
+  (unnecessary because the fallback preserves compatibility).
