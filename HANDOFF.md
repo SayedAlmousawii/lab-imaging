@@ -9,21 +9,16 @@ changed (write "no changes this session" explicitly under that date).
 
 ## Current state
 
-- **Current phase:** Phase 5 — hardening and polish implementation is
-  complete on macOS with deterministic simulated validation. Real
-  Windows hardware validation and a lab-staff README dry-run are still
-  required before marking v1 complete.
-- **Current branch:** `phase-5-hardening-polish`.
+- **Current phase:** Phase 6 — dashboard workflow features. Phase 5 is
+  considered complete by the human, and Phase 6 spec-writing has begun.
+- **Current branch:** `phase-6-dashboard-workflows`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
   camera at index 2; it is excluded from the current lab camera mapping.
   The Codex app process still lacks macOS camera permission, but the
   approved Terminal can run the real-camera driver successfully.
-- **Next actions:** Run the remaining Phase 5 go-live checks on the
-  Windows lab machine: camera disconnect/replug during a run, reboot /
-  index-fallback preview verification, dashboard smoke test, and a
-  cold lab-staff README read-through. Post-Phase-4 usability features
-  remain deferred to Phase 6.
+- **Next actions:** Review the Phase 6 task specs, then implement Task
+  1: startup camera verification workflow.
 
 ---
 
@@ -681,3 +676,23 @@ changed (write "no changes this session" explicitly under that date).
   replug behavior, reboot/index-fallback preview verification, and final
   lab-machine smoke testing. Lab-staff README dry-run is also pending.
 - No push was performed.
+
+### 2026-05-31 — Phase 6 task specs written
+
+- Created and switched to branch `phase-6-dashboard-workflows` from the
+  completed Phase 5 branch.
+- Wrote nine Phase 6 implementation-spec docs:
+  - `specs/phase-6-task-1-startup-camera-verification.md`
+  - `specs/phase-6-task-2-dashboard-camera-configuration.md`
+  - `specs/phase-6-task-3-settings-page.md`
+  - `specs/phase-6-task-4-configurable-save-location.md`
+  - `specs/phase-6-task-5-cloud-sync-guidance.md`
+  - `specs/phase-6-task-6-post-experiment-notes.md`
+  - `specs/phase-6-task-7-experiment-browser.md`
+  - `specs/phase-6-task-8-maintenance-mode.md`
+  - `specs/phase-6-task-9-preview-investigation.md`
+- Updated `specs/phase-6.md` to link each task spec and preserve the
+  intended one-task-at-a-time sequence.
+- Logged decisions #21 and #22 in `DECISIONS.md` for the Phase 6 task
+  split and the `post_notes.txt` storage choice.
+- No runtime code changes were made. No push was performed.

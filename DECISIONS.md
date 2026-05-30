@@ -353,3 +353,34 @@ them here so a future session can revisit if any feel wrong.
   polish (it changes camera lifetime semantics); implementing it before
   a new spec (would silently violate `AGENTS.md` and the Phase 3/5
   preview constraints).
+
+## 2026-05-31 — Phase 6 task spec structure
+
+### 21. Phase 6 work is split into nine task specs
+
+- **Decided:** Phase 6 is organized as nine implementation-spec files:
+  startup camera verification, dashboard camera configuration, settings,
+  save location, cloud-sync guidance, post-experiment notes, experiment
+  browser, maintenance mode, and preview investigation. The first
+  implementation unit is startup camera verification.
+- **Why:** The Phase 6 roadmap contains multiple independent workflow
+  features. Splitting them keeps implementation narrow and prevents a
+  future session from building settings, camera setup, browser, notes,
+  maintenance, and preview behavior in one broad pass.
+- **Considered and rejected:** Keeping Phase 6 as only a holding spec
+  (too ambiguous for implementation); combining related tasks into one
+  large spec (too easy to blur scope and ship future features early).
+
+### 22. Post-experiment notes use `post_notes.txt`
+
+- **Decided:** The first post-experiment notes implementation will store
+  editable researcher notes in `post_notes.txt` inside the experiment
+  folder, while preserving the original start-time `notes` field in
+  `metadata.json`.
+- **Why:** A text file stays human-readable, travels with the experiment
+  folder, and avoids rewriting historical metadata for ordinary note
+  edits.
+- **Considered and rejected:** Reusing `metadata.json` for all post-run
+  edits (mixes original run metadata with later observations); an
+  append-only note log (better audit trail, but heavier than needed for
+  the initial dashboard note editor).
