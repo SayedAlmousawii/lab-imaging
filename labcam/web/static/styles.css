@@ -702,6 +702,10 @@ body {
   border-radius: 0 var(--r-md) var(--r-md) 0;
 }
 
+.post-notes-textarea {
+  min-height: 260px;
+}
+
 .two-col {
   display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
 }

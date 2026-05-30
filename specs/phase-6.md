@@ -104,6 +104,6 @@ time, in order, unless the human explicitly changes the phase sequence.
 1. Startup camera verification workflow.
 2. Dashboard camera configuration and stress test.
 3. Settings page plus configurable save location.
-4. Experiment browser.
-5. Post-experiment notes.
+4. Post-experiment notes.
+5. Experiment browser.
 6. Maintenance mode and any live-preview investigation.

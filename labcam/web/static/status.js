@@ -22,6 +22,7 @@ const ICONS = {
   info: '<svg class="ic ic-16 ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><circle cx="12" cy="8" r="0.7" fill="currentColor" stroke="none"/></svg>',
   imageOff: '<svg class="ic ic-22 ico" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="3" y1="5" x2="21" y2="19"/></svg>',
   plug: '<svg class="ic ic-16 ico" viewBox="0 0 24 24"><path d="M9 2v6"/><path d="M15 2v6"/><path d="M6 8h12v4a6 6 0 0 1-12 0V8Z"/><path d="M12 18v4"/></svg>',
+  note: '<svg class="ic ic-16" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>',
 };
 
 function escapeHtml(value) {
@@ -223,6 +224,9 @@ function doneBody(station) {
   const folder = station.folder
     ? `<span>Output: <span class="mono">${escapeHtml(station.folder)}</span></span>`
     : "";
+  const notesLink = station.post_notes_url
+    ? `<a class="btn btn-sm" href="${escapeHtml(station.post_notes_url)}">${ICONS.note} ${station.has_post_notes ? "Edit notes" : "Add notes"}</a>`
+    : "";
   return `
     <div class="exp-line">
       <span class="exp-name">${escapeHtml(station.experiment_name || "")}</span>
@@ -237,6 +241,7 @@ function doneBody(station) {
     <div class="station-foot">
       ${folder}
       <span class="spacer"></span>
+      ${notesLink}
       <a class="btn btn-sm" href="/new">Start another</a>
     </div>
     ${identityNote(station)}
@@ -244,6 +249,9 @@ function doneBody(station) {
 }
 
 function errorBody(station) {
+  const notesLink = station.post_notes_url
+    ? `<a class="btn btn-sm" href="${escapeHtml(station.post_notes_url)}">${ICONS.note} ${station.has_post_notes ? "Edit notes" : "Add notes"}</a>`
+    : "";
   return `
     <div class="note is-danger">
       ${ICONS.alert}
@@ -254,6 +262,7 @@ function errorBody(station) {
     </div>
     <div class="station-foot">
       <span class="spacer"></span>
+      ${notesLink}
       ${station.experiment_id ? `<button type="button" class="btn is-danger btn-sm" data-stop-id="${escapeHtml(station.experiment_id)}">${ICONS.square} Stop run</button>` : ""}
     </div>
     ${identityNote(station)}

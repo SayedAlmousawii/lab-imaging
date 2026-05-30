@@ -11,10 +11,11 @@ changed (write "no changes this session" explicitly under that date).
 
 - **Current phase:** Phase 6 — dashboard workflow features. Phase 5 is
   considered complete by the human. Phase 6 Task 1, Task 2, Task 3,
-  Task 4, and Task 5, including dashboard hot-plug detection,
+  Task 4, Task 5, and Task 6, including dashboard hot-plug detection,
   detected-preview, stale camera-row/preview/draft-input guards, the
-  Settings page, configurable experiment save location, and
-  cloud-synced storage guidance, are implemented locally.
+  Settings page, configurable experiment save location,
+  cloud-synced storage guidance, and post-experiment notes, are
+  implemented locally.
 - **Current branch:** `phase-6-dashboard-workflows`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
@@ -23,7 +24,7 @@ changed (write "no changes this session" explicitly under that date).
   approved Terminal can run the real-camera driver successfully. Manual
   Terminal-hosted post-fix stale-row/hot-plug preview and draft-input
   validation is pending.
-- **Next actions:** Implement Phase 6 Task 6: post-experiment notes.
+- **Next actions:** Implement Phase 6 Task 7: experiment browser.
 
 ---
 
@@ -1088,6 +1089,44 @@ changed (write "no changes this session" explicitly under that date).
     unrelated `token` variable names in `tools/phase2_driver.py`.
   - Case-insensitive cloud-keyword grep confirmed the README and
     Settings page contain the intended guidance.
+- Manual real-camera stale-row/hot-plug preview and draft-input
+  validation remains pending from Task 2 because the Codex app process
+  lacks macOS camera permission.
+- No push was performed.
+
+### 2026-05-31 — Phase 6 Task 6 post-experiment notes implemented
+
+- Implemented post-run notes as `post_notes.txt` sidecar files inside
+  finalized experiment folders. Non-empty saves are atomic; blank or
+  whitespace-only saves delete the sidecar file.
+- Added the dashboard note editor at
+  `/experiments/<experiment_id>/notes` plus JSON APIs:
+  `GET /api/experiments/<experiment_id>/post-notes` and
+  `POST /api/experiments/<experiment_id>/post-notes`.
+- Notes are rejected for active or unfinished experiments. Original
+  start-time `metadata.json` notes remain unchanged.
+- Terminal station status payloads now include `has_post_notes` and
+  `post_notes_url`, and finished/stopped/failed station cards show
+  Add/Edit notes links. Task 7's full experiment browser was not
+  implemented.
+- Updated `specs/phase-6.md` so Suggested Ordering matches the current
+  Task 6 before Task 7 sequence. Updated
+  `specs/phase-6-task-6-post-experiment-notes.md` and appended
+  Decision 27 for blank-note deletion.
+- Added `tools/phase6_task6_driver.py` covering add/edit/delete,
+  metadata preservation, active-run rejection, status-card links, the
+  notes page, and invalid/traversal id rejection.
+- Validation passed:
+  - `.venv/bin/python tools/phase6_task6_driver.py` passed 7/7
+    scenarios.
+  - `.venv/bin/python -m compileall labcam tools`
+  - `node --check labcam/web/static/status.js`
+  - `node --check labcam/web/static/experiment_notes.js`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches.
 - Manual real-camera stale-row/hot-plug preview and draft-input
   validation remains pending from Task 2 because the Codex app process
   lacks macOS camera permission.

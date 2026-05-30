@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 import time
@@ -29,7 +30,17 @@ from labcam.engine.settings import (
     load_effective_settings,
     save_editable_settings,
 )
-from labcam.engine.storage import StorageError, sanitize_name
+from labcam.engine.storage import (
+    POST_NOTES_FILENAME,
+    StorageError,
+    read_json_file,
+    read_post_notes,
+    sanitize_name,
+    write_post_notes,
+)
+
+
+EXPERIMENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 
 
 def create_app(engine: CaptureEngine) -> Flask:
@@ -67,6 +78,10 @@ def create_app(engine: CaptureEngine) -> Flask:
     @app.get("/verify-cameras")
     def verify_cameras_page() -> str:
         return render_template("verify.html")
+
+    @app.get("/experiments/<experiment_id>/notes")
+    def experiment_notes_page(experiment_id: str) -> str:
+        return render_template("experiment_notes.html", experiment_id=experiment_id)
 
     @app.get("/api/cameras")
     def api_cameras() -> Response:
@@ -255,6 +270,38 @@ def create_app(engine: CaptureEngine) -> Flask:
             return _error("no_frame", "No captured frame is available yet", 404)
         return send_file(latest, mimetype="image/jpeg", max_age=0)
 
+    @app.get("/api/experiments/<experiment_id>/post-notes")
+    def api_get_post_notes(experiment_id: str) -> Response:
+        try:
+            return jsonify(_post_notes_payload(engine, experiment_id))
+        except ValueError as exc:
+            return _error("invalid_experiment_id", str(exc), 400)
+        except ActiveExperimentError as exc:
+            return _error("experiment_active", str(exc), 409)
+        except ExperimentNotFoundError as exc:
+            return _error("not_found", str(exc), 404)
+        except StorageError as exc:
+            return _error("metadata_unavailable", str(exc), 422)
+
+    @app.post("/api/experiments/<experiment_id>/post-notes")
+    def api_save_post_notes(experiment_id: str) -> Response:
+        payload = _json_payload()
+        notes = str(payload.get("notes") or "")
+        try:
+            context = _post_notes_context(engine, experiment_id)
+            write_post_notes(context["folder"], notes)
+            return jsonify(_post_notes_payload(engine, experiment_id))
+        except ValueError as exc:
+            return _error("invalid_experiment_id", str(exc), 400)
+        except ActiveExperimentError as exc:
+            return _error("experiment_active", str(exc), 409)
+        except ExperimentNotFoundError as exc:
+            return _error("not_found", str(exc), 404)
+        except StorageError as exc:
+            return _error("metadata_unavailable", str(exc), 422)
+        except OSError as exc:
+            return _error("notes_not_saved", f"Could not save post-run notes: {exc}", 500)
+
     @app.get("/api/settings")
     def api_settings() -> Response:
         try:
@@ -419,6 +466,16 @@ def _station_status(engine: CaptureEngine) -> list[dict[str, Any]]:
         latest_url = None
         if experiment.get("latest_frame_path"):
             latest_url = f"/api/experiments/{experiment['experiment_id']}/latest"
+        is_terminal = experiment.get("status") != "capturing"
+        notes_url = (
+            f"/experiments/{experiment['experiment_id']}/notes"
+            if is_terminal and experiment.get("experiment_id")
+            else None
+        )
+        has_post_notes = False
+        folder = experiment.get("folder")
+        if is_terminal and folder:
+            has_post_notes = (Path(str(folder)) / POST_NOTES_FILENAME).exists()
         stations.append(
             {
                 "camera_label": camera.label,
@@ -449,9 +506,71 @@ def _station_status(engine: CaptureEngine) -> list[dict[str, Any]]:
                 "latest_url": latest_url,
                 "folder": experiment.get("folder"),
                 "end_reason": experiment.get("end_reason"),
+                "has_post_notes": has_post_notes,
+                "post_notes_url": notes_url,
             }
         )
     return stations
+
+
+def _post_notes_payload(engine: CaptureEngine, experiment_id: str) -> dict[str, Any]:
+    context = _post_notes_context(engine, experiment_id)
+    notes = read_post_notes(context["folder"])
+    metadata = context["metadata"]
+    return {
+        "experiment_id": experiment_id,
+        "experiment_name": metadata.get("name"),
+        "camera_label": metadata.get("camera_label"),
+        "folder": str(context["folder"]),
+        "metadata_notes": metadata.get("notes") or "",
+        "post_notes": notes,
+        "has_post_notes": bool(notes.strip()),
+        "post_notes_file": str(context["folder"] / POST_NOTES_FILENAME),
+        "ended_at": metadata.get("ended_at"),
+        "end_reason": metadata.get("end_reason"),
+        "editable": True,
+    }
+
+
+def _post_notes_context(engine: CaptureEngine, experiment_id: str) -> dict[str, Any]:
+    folder = _experiment_folder(engine, experiment_id)
+    for experiment in engine.list_experiments():
+        if (
+            experiment.get("experiment_id") == experiment_id
+            and experiment.get("status") == "capturing"
+        ):
+            raise ActiveExperimentError(
+                "Post-run notes are available after this experiment finishes."
+            )
+
+    metadata_path = folder / "metadata.json"
+    if not metadata_path.exists():
+        raise ExperimentNotFoundError(f"Experiment metadata was not found: {experiment_id}")
+    try:
+        metadata = read_json_file(metadata_path)
+    except (json.JSONDecodeError, OSError) as exc:
+        raise StorageError(f"Experiment metadata could not be read: {experiment_id}") from exc
+    if not metadata.get("ended_at") or not metadata.get("end_reason"):
+        raise ActiveExperimentError(
+            "Post-run notes are available after this experiment finishes."
+        )
+    return {"folder": folder, "metadata": metadata}
+
+
+def _experiment_folder(engine: CaptureEngine, experiment_id: str) -> Path:
+    experiment_id = str(experiment_id or "").strip()
+    if not EXPERIMENT_ID_PATTERN.fullmatch(experiment_id):
+        raise ValueError("Experiment id is not valid.")
+
+    root = engine.experiments_dir.resolve()
+    folder = (root / experiment_id).resolve()
+    try:
+        folder.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("Experiment id is not valid.") from exc
+    if not folder.is_dir():
+        raise ExperimentNotFoundError(f"Unknown experiment: {experiment_id}")
+    return folder
 
 
 def _wait_for_final_status(engine: CaptureEngine, experiment_id: str) -> dict[str, Any] | None:

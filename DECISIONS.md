@@ -440,3 +440,15 @@ them here so a future session can revisit if any feel wrong.
   `experiments_dir` during recovery (can miss active runs created in a
   previous location); rewriting old state entries ahead of time
   (unnecessary because the fallback preserves compatibility).
+
+### 27. Blank post-experiment notes remove the sidecar file
+
+- **Decided:** Saving an empty or whitespace-only post-experiment note
+  deletes `post_notes.txt` instead of keeping an empty sidecar file.
+- **Why:** Missing file and no-note state become the same simple
+  filesystem signal, and note presence stays easy to display in the
+  dashboard and future experiment browser.
+- **Considered and rejected:** Keeping an empty `post_notes.txt` after
+  blank saves (harder to distinguish meaningful notes from cleared
+  notes); rewriting `metadata.json` to track note state (unnecessary
+  metadata churn).

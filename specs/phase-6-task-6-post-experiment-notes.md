@@ -14,7 +14,8 @@ from the dashboard without editing files by hand.
 - Store post-run notes in a plain text file named `post_notes.txt` in
   the experiment folder.
 - Preserve original start-time `notes` in `metadata.json`.
-- Show note presence in experiment details and browser views.
+- Show note presence from terminal status cards now; the later
+  experiment browser will also show it when Task 7 lands.
 - Write notes atomically.
 
 ## Out of Scope
@@ -31,9 +32,9 @@ from the dashboard without editing files by hand.
   browser and avoid rewriting historical metadata for ordinary edits.
 - Notes are editable as one text body.
 - If the file does not exist, the UI shows an empty editor.
-- Saving an empty note may delete the file or write an empty file; pick
-  one behavior in implementation and document it in the spec update if
-  needed.
+- Saving an empty or whitespace-only note deletes `post_notes.txt`.
+- Until the full experiment browser lands, the editor is reached from
+  completed, stopped, and failed station cards on the status page.
 
 ## Invariants
 

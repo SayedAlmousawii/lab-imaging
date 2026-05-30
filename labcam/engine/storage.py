@@ -15,6 +15,7 @@ from labcam.cameras.interface import save_jpeg
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EXPERIMENTS_DIR = PROJECT_ROOT / "experiments"
 DEFAULT_JPEG_QUALITY = 90
+POST_NOTES_FILENAME = "post_notes.txt"
 
 _SAFE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9-]+")
 
@@ -158,6 +159,49 @@ def atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
         with os.fdopen(fd, "w", encoding="utf-8") as file:
             json.dump(payload, file, indent=2)
             file.write("\n")
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(tmp_path, path)
+        _fsync_directory(path.parent)
+    except Exception:
+        try:
+            tmp_path.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def read_post_notes(experiment_root: Path) -> str:
+    path = experiment_root / POST_NOTES_FILENAME
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return ""
+
+
+def write_post_notes(experiment_root: Path, notes: str) -> bool:
+    path = experiment_root / POST_NOTES_FILENAME
+    cleaned = notes.strip()
+    if not cleaned:
+        try:
+            path.unlink()
+            _fsync_directory(experiment_root)
+        except FileNotFoundError:
+            pass
+        return False
+
+    atomic_write_text(path, notes)
+    return True
+
+
+def atomic_write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    tmp_path = Path(tmp_name)
+
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as file:
+            file.write(text)
             file.flush()
             os.fsync(file.fileno())
         os.replace(tmp_path, path)
