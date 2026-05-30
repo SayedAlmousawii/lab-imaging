@@ -25,12 +25,16 @@ def create_app(engine: CaptureEngine) -> Flask:
 
     @app.get("/")
     def status_page() -> Response | str:
+        if not engine.cameras_path.exists():
+            return redirect(url_for("cameras_page"))
         if engine.verification_required():
             return redirect(url_for("verify_cameras_page"))
         return render_template("status.html")
 
     @app.get("/new")
     def new_experiment_page() -> Response | str:
+        if not engine.cameras_path.exists():
+            return redirect(url_for("cameras_page"))
         if engine.verification_required():
             return redirect(url_for("verify_cameras_page"))
         return render_template(
@@ -38,6 +42,10 @@ def create_app(engine: CaptureEngine) -> Flask:
             default_interval_minutes=engine.settings.get("default_interval_minutes", 5),
             default_duration_hours=engine.settings.get("default_duration_hours", 12),
         )
+
+    @app.get("/cameras")
+    def cameras_page() -> str:
+        return render_template("cameras.html")
 
     @app.get("/verify-cameras")
     def verify_cameras_page() -> str:
@@ -58,6 +66,66 @@ def create_app(engine: CaptureEngine) -> Flask:
         except CameraConfigError as exc:
             return _error("missing_camera_config", str(exc), 500)
         return jsonify({"cameras": cameras})
+
+    @app.get("/api/cameras/detected")
+    def api_detected_cameras() -> Response:
+        try:
+            return jsonify({
+                "configured": _configured_camera_payload(engine),
+                "detected": engine.detected_cameras(),
+            })
+        except ActiveExperimentError as exc:
+            return _error("camera_setup_busy", str(exc), 409)
+        except Exception as exc:
+            return _error("camera_detection_failed", _capture_message(exc), 500)
+
+    @app.post("/api/cameras/detected/preview")
+    def api_detected_camera_preview() -> Response:
+        payload = _json_payload()
+        try:
+            camera_index = int(payload.get("camera_index"))
+            preview_path = engine.preview_detected_camera(camera_index)
+        except (TypeError, ValueError):
+            return _error("missing_camera", "camera_index is required", 400)
+        except ActiveExperimentError as exc:
+            return _error("camera_busy", str(exc), 409)
+        except CameraConfigError as exc:
+            return _error("unknown_camera", _camera_config_message(exc), 400)
+        except Exception as exc:
+            return _error("preview_failed", _capture_message(exc), 500)
+        return send_file(preview_path, mimetype="image/jpeg", max_age=0)
+
+    @app.post("/api/cameras/config")
+    def api_save_camera_config() -> Response:
+        payload = _json_payload()
+        mappings = payload.get("mappings")
+        if not isinstance(mappings, list):
+            return _error("invalid_mapping", "mappings must be a list", 400)
+        try:
+            verification = engine.save_camera_config(mappings)
+        except CameraConfigError as exc:
+            return _error("invalid_mapping", str(exc), 400)
+        return jsonify({
+            "configured": _configured_camera_payload(engine),
+            "verification": verification,
+        })
+
+    @app.post("/api/cameras/stress-test")
+    def api_camera_stress_test() -> Response:
+        payload = _json_payload()
+        indexes = payload.get("camera_indexes")
+        if not isinstance(indexes, list):
+            return _error("invalid_stress_test", "camera_indexes must be a list", 400)
+        try:
+            cycles = int(payload.get("cycles") or 100)
+            results = engine.stress_test_cameras([int(index) for index in indexes], cycles=cycles)
+        except (TypeError, ValueError):
+            return _error("invalid_stress_test", "camera indexes and cycles must be numbers", 400)
+        except ActiveExperimentError as exc:
+            return _error("camera_busy", str(exc), 409)
+        except CameraConfigError as exc:
+            return _error("invalid_stress_test", str(exc), 400)
+        return jsonify(results)
 
     @app.post("/api/preview")
     def api_preview() -> Response:
@@ -221,6 +289,24 @@ def _experiment_folder_preview(
     }
 
 
+def _configured_camera_payload(engine: CaptureEngine) -> list[dict[str, Any]]:
+    if not engine.cameras_path.exists():
+        return []
+    return [
+        {
+            "label": camera.label,
+            "identity_strategy": camera.identity_strategy,
+            "stable_id": camera.stable_id,
+            "last_seen_index": camera.last_seen_index,
+            "warnings": camera.warnings,
+            "notes": camera.notes,
+            "last_confirmed_at": camera.last_confirmed_at,
+            "last_confirmed_index": camera.last_confirmed_index,
+        }
+        for camera in engine.list_cameras()
+    ]
+
+
 def _station_status(engine: CaptureEngine) -> list[dict[str, Any]]:
     now = datetime.now().astimezone()
     experiments = engine.list_experiments()
@@ -369,6 +455,8 @@ def _camera_config_message(exc: Exception) -> str:
 
 def _capture_message(exc: Exception) -> str:
     text = str(exc).lower()
+    if "camera index" in text and "not detected" in text:
+        return "Camera list changed. Click Detect and capture preview again."
     if "open camera" in text or "read frame" in text or "not detected" in text:
         return "Camera is not responding. Check the USB connection."
     return "Could not capture a preview. Check the camera and try again."

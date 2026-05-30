@@ -16,6 +16,7 @@
         <nav aria-label="Primary">
           <a href="/" class="{% if request.endpoint == 'status_page' %}is-active{% endif %}">Station status</a>
           <a href="/new" class="{% if request.endpoint == 'new_experiment_page' %}is-active{% endif %}">New experiment</a>
+          <a href="/cameras" class="{% if request.endpoint == 'cameras_page' %}is-active{% endif %}">Cameras</a>
           <a href="/verify-cameras" class="{% if request.endpoint == 'verify_cameras_page' %}is-active{% endif %}">Verify cameras</a>
         </nav>
         <div class="spacer"></div>

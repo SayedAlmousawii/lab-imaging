@@ -960,6 +960,91 @@ body {
   margin-bottom: 14px;
 }
 
+/* ─────────────────────────────────────────
+   Dashboard camera configuration
+   ───────────────────────────────────────── */
+.camera-config-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 980px) {
+  .camera-config-grid { grid-template-columns: 1fr; }
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.section-title h2 {
+  margin: 0;
+  font: 600 15px/1.2 var(--font-sans);
+  color: var(--text-1);
+}
+.section-title span {
+  margin-left: auto;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.setup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+@media (max-width: 1180px) {
+  .setup-grid { grid-template-columns: 1fr; }
+}
+
+.setup-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.setup-card:hover { border-color: var(--line-strong); }
+
+.checkline {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.checkline input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+}
+
+.setup-panel {
+  position: sticky;
+  top: 72px;
+}
+.setup-panel .card-body {
+  display: grid;
+  gap: 14px;
+}
+.stress-results {
+  display: grid;
+  gap: 8px;
+}
+
+#camera-alerts {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
 /* Shimmer for loading state */
 .shimmer {
   position: absolute; inset: 0;

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 import platform
+import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
@@ -17,6 +20,7 @@ from labcam.cameras.base_capture import (
 IdentityStrategy = Literal["hardware_id", "usb_port", "index_fallback"]
 
 _CAPTURE_LOCK = Lock()
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 @dataclass(frozen=True)
@@ -43,6 +47,92 @@ def list_cameras() -> list[CameraInfo]:
 
     raise NotImplementedError(
         f"Camera enumeration for {system_name or 'this OS'} is not implemented"
+    )
+
+
+def list_cameras_fresh_process(*, timeout_seconds: float = 30) -> list[CameraInfo]:
+    result = subprocess.run(
+        [sys.executable, "-m", "labcam.cameras.probe"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=timeout_seconds,
+        cwd=PROJECT_ROOT,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "Camera detection failed").strip()
+        raise RuntimeError(detail)
+
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Camera detection returned invalid data.") from exc
+
+    records = payload.get("cameras") if isinstance(payload, dict) else None
+    if not isinstance(records, list):
+        raise RuntimeError("Camera detection returned no camera list.")
+    return [camera_info_from_dict(record) for record in records if isinstance(record, dict)]
+
+
+def preview_camera_fresh_process(
+    camera_index: int,
+    output_path: str | Path,
+    *,
+    quality: int | None = None,
+    timeout_seconds: float = 30,
+) -> Path:
+    command = [
+        sys.executable,
+        "-m",
+        "labcam.cameras.probe",
+        "--preview-index",
+        str(camera_index),
+        "--output",
+        str(output_path),
+    ]
+    if quality is not None:
+        command.extend(["--quality", str(quality)])
+
+    result = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=timeout_seconds,
+        cwd=PROJECT_ROOT,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "Preview capture failed").strip()
+        raise RuntimeError(detail)
+
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Preview capture returned invalid data.") from exc
+
+    preview_path = payload.get("preview_path") if isinstance(payload, dict) else None
+    if not preview_path:
+        raise RuntimeError("Preview capture returned no output path.")
+    return Path(str(preview_path))
+
+
+def camera_info_to_dict(camera: CameraInfo) -> dict[str, object]:
+    return {
+        "label": camera.label,
+        "identity_strategy": camera.identity_strategy,
+        "stable_id": camera.stable_id,
+        "index": camera.index,
+        "warnings": camera.warnings,
+    }
+
+
+def camera_info_from_dict(record: dict[str, object]) -> CameraInfo:
+    return CameraInfo(
+        label=str(record["label"]),
+        identity_strategy=str(record["identity_strategy"]),  # type: ignore[arg-type]
+        stable_id=str(record["stable_id"]),
+        index=int(record["index"]),
+        warnings=list(record.get("warnings") or []),
     )
 
 
