@@ -25,6 +25,13 @@ def main() -> int:
         return 1
 
     engine = CaptureEngine(settings_path=DEFAULT_SETTINGS_PATH, cameras_path=DEFAULT_CAMERAS_PATH)
+    for camera in engine.list_cameras():
+        unavailable_message = engine.camera_unavailable_message(camera)
+        if unavailable_message:
+            print(
+                f"WARNING: {camera.label} is unavailable. {unavailable_message}",
+                file=sys.stderr,
+            )
     engine.start()
     app = create_app(engine)
 

@@ -11,7 +11,13 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
 
-from labcam.cameras.interface import CameraInfo, capture_frame, preview_frame, save_jpeg
+from labcam.cameras.interface import (
+    CameraInfo,
+    capture_frame,
+    check_camera_available,
+    preview_frame,
+    save_jpeg,
+)
 from labcam.engine.experiment import (
     ActiveExperimentError,
     BaselineCaptureError,
@@ -33,6 +39,7 @@ from labcam.engine.storage import (
     save_frame_as_jpeg,
     update_metadata_finalize,
     write_metadata,
+    StorageError,
 )
 
 
@@ -96,6 +103,7 @@ class CaptureEngine:
         state_path: Path = DEFAULT_STATE_PATH,
         capture_func: Callable[[CameraInfo], Any] = capture_frame,
         preview_func: Callable[[CameraInfo], Any] = preview_frame,
+        camera_check_func: Callable[[CameraInfo], None] = check_camera_available,
         save_jpeg_func: Callable[..., Path] = save_jpeg,
         disk_usage_func: Callable[[Path], shutil._ntuple_diskusage] = shutil.disk_usage,
         now_func: Callable[[], datetime] = local_now,
@@ -116,6 +124,7 @@ class CaptureEngine:
         self.state = RunningStateManager(state_path)
         self.capture_func = capture_func
         self.preview_func = preview_func
+        self.camera_check_func = camera_check_func
         self.save_jpeg_func = save_jpeg_func
         self.disk_usage_func = disk_usage_func
         self.now_func = now_func
@@ -275,15 +284,15 @@ class CaptureEngine:
                 raise ExperimentNotFoundError(f"Unknown experiment: {experiment_id}")
             return experiment.latest_frame_path()
 
-    def shutdown(self, *, wait: bool = True) -> None:
+    def shutdown(self, *, wait: bool = True, timeout_seconds: float | None = 5) -> None:
         self._shutdown.set()
         self._wake.set()
         thread = self._thread
         if wait and thread is not None:
-            thread.join(timeout=5)
+            thread.join(timeout=timeout_seconds)
 
     def shutdown_cleanly(self, *, wait: bool = True) -> None:
-        self.shutdown(wait=wait)
+        self.shutdown(wait=wait, timeout_seconds=None)
         self._finalize_all_active("stopped_early")
 
     def wait_until_idle(self, *, timeout_seconds: float | None = None) -> bool:
@@ -370,6 +379,8 @@ class CaptureEngine:
                 self.state.replace_entry(active.to_running_state())
             except Exception as exc:
                 failure = self._storage_failure(exc, active.paths.root)
+                if failure is None:
+                    raise
                 failure.image_saved = False
                 self._finalize_storage_failure(active.experiment_id, failure)
                 return
@@ -402,7 +413,10 @@ class CaptureEngine:
                             save_jpeg_func=self.save_jpeg_func,
                         )
                     except Exception as exc:
-                        raise self._storage_failure(exc, experiment.paths.root) from exc
+                        failure = self._storage_failure(exc, experiment.paths.root)
+                        if failure is None:
+                            raise
+                        raise failure from exc
                 try:
                     append_log_line(
                         experiment.paths.log_path,
@@ -412,6 +426,8 @@ class CaptureEngine:
                     )
                 except Exception as exc:
                     failure = self._storage_failure(exc, experiment.paths.root)
+                    if failure is None:
+                        raise
                     failure.image_saved = True
                     raise failure from exc
                 return
@@ -428,7 +444,10 @@ class CaptureEngine:
                             f"seq={sequence:04d} {_capture_error_message(exc)}, retry {attempt}",
                         )
                     except Exception as log_exc:
-                        raise self._storage_failure(log_exc, experiment.paths.root) from log_exc
+                        failure = self._storage_failure(log_exc, experiment.paths.root)
+                        if failure is None:
+                            raise
+                        raise failure from log_exc
 
         try:
             append_log_line(
@@ -438,7 +457,10 @@ class CaptureEngine:
                 f"seq={sequence:04d} failed after retries; sequence gap recorded",
             )
         except Exception as exc:
-            raise self._storage_failure(exc, experiment.paths.root) from exc
+            failure = self._storage_failure(exc, experiment.paths.root)
+            if failure is None:
+                raise
+            raise failure from exc
         raise EngineError(str(last_error) if last_error else "capture failed")
 
     def _mark_capturing(self, camera_label: str) -> "_CaptureMarker":
@@ -529,8 +551,20 @@ class CaptureEngine:
     def _record_finalization_error(self, experiment: Experiment, message: str) -> None:
         experiment.mark_terminal_health(message=message, failed_at=self.now_func())
 
-    def _storage_failure(self, exc: Exception, path: Path) -> _TerminalStorageFailure:
+    def camera_unavailable_message(self, camera: CameraRecord) -> str | None:
+        with self._lock:
+            if camera.label in self._starting_cameras or self._capturing_cameras.get(camera.label, 0) > 0:
+                return None
+        try:
+            self.camera_check_func(camera.to_camera_info())
+        except Exception as exc:
+            return _capture_error_message(exc)
+        return None
+
+    def _storage_failure(self, exc: Exception, path: Path) -> _TerminalStorageFailure | None:
         reason = self._storage_failure_reason(exc, path)
+        if reason is None:
+            return None
         if reason == "disk_full":
             return _TerminalStorageFailure(
                 reason="disk_full",
@@ -541,10 +575,12 @@ class CaptureEngine:
             message="Storage is not writable. Check the results folder and start a new run.",
         )
 
-    def _storage_failure_reason(self, exc: Exception, path: Path) -> str:
+    def _storage_failure_reason(self, exc: Exception, path: Path) -> str | None:
         if _is_no_space_error(exc) or self._low_free_space(path):
             return "disk_full"
-        return "storage_failed"
+        if _is_storage_error(exc):
+            return "storage_failed"
+        return None
 
     def _low_free_space(self, path: Path) -> bool:
         probe = path if path.exists() else path.parent
@@ -659,3 +695,10 @@ def _is_no_space_error(exc: Exception) -> bool:
         return True
     text = str(exc).lower()
     return "no space left" in text or "not enough space" in text or "disk full" in text
+
+
+def _is_storage_error(exc: Exception) -> bool:
+    if isinstance(exc, (OSError, StorageError)):
+        return True
+    text = str(exc).lower()
+    return "could not write jpeg" in text or "permission denied" in text or "not writable" in text

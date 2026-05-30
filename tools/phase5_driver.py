@@ -60,13 +60,16 @@ def main() -> int:
         ("single capture failure", lambda: scenario_single_capture_failure(experiments_dir)),
         ("capture failing threshold", lambda: scenario_capture_failing_threshold(experiments_dir)),
         ("capture recovery", lambda: scenario_capture_recovery(experiments_dir)),
+        ("idle configured camera unavailable", lambda: scenario_idle_camera_unavailable(experiments_dir)),
         ("camera unavailable", lambda: scenario_camera_unavailable(experiments_dir)),
         ("camera failure is not disk failure", lambda: scenario_camera_failure_not_disk(experiments_dir)),
+        ("unclear save failure is not disk failure", lambda: scenario_unclear_save_failure_not_disk(experiments_dir)),
         ("image write storage failure", lambda: scenario_storage_failed(experiments_dir)),
         ("low-space storage failure", lambda: scenario_disk_full(experiments_dir)),
         ("clean shutdown one run", lambda: scenario_clean_shutdown_one(experiments_dir)),
         ("clean shutdown two runs", lambda: scenario_clean_shutdown_two(experiments_dir)),
         ("shutdown during capture", lambda: scenario_shutdown_during_capture(experiments_dir)),
+        ("clean shutdown waits for long capture", lambda: scenario_shutdown_waits_for_long_capture(experiments_dir)),
         ("crash recovery unchanged", lambda: scenario_crash_recovery(experiments_dir)),
     ]
 
@@ -164,6 +167,21 @@ def scenario_camera_unavailable(experiments_dir: Path) -> str:
             engine.shutdown_cleanly()
 
 
+def scenario_idle_camera_unavailable(experiments_dir: Path) -> str:
+    with _temp_config("idle-unavailable") as config:
+        def unavailable(_: CameraInfo) -> None:
+            raise RuntimeError("Could not open camera index 99")
+
+        engine = _engine(experiments_dir, config, camera_check_func=unavailable)
+        try:
+            station = _station(engine, "idle-unavailable")
+            if station["health_state"] != "camera_unavailable" or station["state"] != "offline":
+                raise ScenarioFailure(f"expected idle offline station, got {station}")
+            return station["camera_label"]
+        finally:
+            engine.shutdown_cleanly()
+
+
 def scenario_camera_failure_not_disk(experiments_dir: Path) -> str:
     with _temp_config("camera-not-disk") as config:
         failures = _ScheduledFailures([True])
@@ -173,6 +191,22 @@ def scenario_camera_failure_not_disk(experiments_dir: Path) -> str:
             _wait_for(lambda: _experiment(engine, experiment_id)["consecutive_failures"] == 1)
             experiment = _experiment(engine, experiment_id)
             _assert_not_terminal_storage(experiment)
+            return experiment_id
+        finally:
+            engine.shutdown_cleanly()
+
+
+def scenario_unclear_save_failure_not_disk(experiments_dir: Path) -> str:
+    with _temp_config("unclear-save") as config:
+        save = _ScheduledSaveFailure(RuntimeError("jpeg encoder rejected frame"))
+        engine = _engine(experiments_dir, config, save_jpeg_func=save.save)
+        try:
+            experiment_id = _start(engine, "unclear-save", "phase5-unclear-save")
+            _wait_for(lambda: _experiment(engine, experiment_id)["consecutive_failures"] == 1)
+            experiment = _experiment(engine, experiment_id)
+            _assert_not_terminal_storage(experiment)
+            if experiment.get("status") != "capturing":
+                raise ScenarioFailure(f"unclear save failure stopped experiment: {experiment}")
             return experiment_id
         finally:
             engine.shutdown_cleanly()
@@ -265,6 +299,40 @@ def scenario_shutdown_during_capture(experiments_dir: Path) -> str:
         thread.join(timeout=6)
         if thread.is_alive():
             raise ScenarioFailure("shutdown did not finish after slow capture released")
+        _assert_end_reason(experiments_dir / experiment_id, "stopped_early")
+        _assert_state_empty(config.state_path)
+        return experiment_id
+
+
+def scenario_shutdown_waits_for_long_capture(experiments_dir: Path) -> str:
+    with _temp_config("long-capture") as config:
+        entered = threading.Event()
+        release = threading.Event()
+        calls = 0
+
+        def capture(camera: CameraInfo) -> Any:
+            nonlocal calls
+            calls += 1
+            if calls > 1:
+                entered.set()
+                release.wait(timeout=8)
+            return ONE_PIXEL_JPEG
+
+        engine = _engine(experiments_dir, config, capture_func=capture)
+        experiment_id = _start(engine, "long-capture", "phase5-long-shutdown")
+        _wait_for(lambda: entered.is_set(), timeout=5)
+        thread = threading.Thread(target=engine.shutdown_cleanly)
+        thread.start()
+        time.sleep(5.2)
+        if not thread.is_alive():
+            raise ScenarioFailure("clean shutdown finalized before long capture finished")
+        metadata = read_json_file(experiments_dir / experiment_id / "metadata.json")
+        if metadata.get("end_reason") is not None:
+            raise ScenarioFailure(f"metadata finalized before capture finished: {metadata}")
+        release.set()
+        thread.join(timeout=4)
+        if thread.is_alive():
+            raise ScenarioFailure("shutdown did not finish after long capture released")
         _assert_end_reason(experiments_dir / experiment_id, "stopped_early")
         _assert_state_empty(config.state_path)
         return experiment_id
@@ -395,6 +463,7 @@ def _engine(
     config: _TempConfig,
     *,
     capture_func: Callable[[CameraInfo], Any] | None = None,
+    camera_check_func: Callable[[CameraInfo], None] | None = None,
     save_jpeg_func: Callable[..., Path] | None = None,
     disk_usage_func: Callable[[Path], shutil._ntuple_diskusage] = shutil.disk_usage,
 ) -> CaptureEngine:
@@ -403,6 +472,7 @@ def _engine(
         cameras_path=config.cameras_path,
         state_path=config.state_path,
         capture_func=capture_func or _capture_ok,
+        camera_check_func=camera_check_func or _camera_check_ok,
         save_jpeg_func=save_jpeg_func or _save_jpeg,
         disk_usage_func=disk_usage_func,
         poll_floor_seconds=0.05,
@@ -423,6 +493,10 @@ def _start(engine: CaptureEngine, camera_label: str, name: str) -> str:
 
 def _capture_ok(_: CameraInfo) -> bytes:
     return ONE_PIXEL_JPEG
+
+
+def _camera_check_ok(_: CameraInfo) -> None:
+    return None
 
 
 def _save_jpeg(image: Any, output_path: Path, *, quality: int | None = None) -> Path:

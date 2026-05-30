@@ -205,15 +205,21 @@ def _station_status(engine: CaptureEngine) -> list[dict[str, Any]]:
     for camera in engine.list_cameras():
         experiment = by_camera.get(camera.label)
         if experiment is None:
-            health_state = _idle_health_state(camera.identity_strategy)
+            unavailable_message = engine.camera_unavailable_message(camera)
+            health_state = (
+                "camera_unavailable"
+                if unavailable_message
+                else _idle_health_state(camera.identity_strategy)
+            )
             stations.append(
                 {
                     "camera_label": camera.label,
-                    "state": "idle",
+                    "state": "offline" if unavailable_message else "idle",
                     "identity_strategy": camera.identity_strategy,
                     "warnings": camera.warnings,
                     "health_state": health_state,
-                    "health_message": _identity_health_message(camera.identity_strategy),
+                    "health_message": unavailable_message
+                    or _identity_health_message(camera.identity_strategy),
                     "consecutive_failures": 0,
                     "last_error_at": None,
                 }

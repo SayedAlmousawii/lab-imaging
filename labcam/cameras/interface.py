@@ -59,6 +59,10 @@ def preview_frame(camera_id: int | str | CameraInfo) -> Any:
     return capture_frame(camera_id)
 
 
+def check_camera_available(camera_id: int | str | CameraInfo) -> None:
+    capture_frame(camera_id)
+
+
 def save_jpeg(image: Any, output_path: str | Path, *, quality: int | None = None) -> Path:
     return save_jpeg_image(image, Path(output_path), quality=quality)
 

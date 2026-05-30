@@ -629,3 +629,55 @@ changed (write "no changes this session" explicitly under that date).
   replug behavior, reboot/index-fallback preview verification, and final
   lab-machine smoke testing. Lab-staff README dry-run is also pending.
 - No push was performed.
+
+### 2026-05-29 — Phase 5 review against spec
+
+- Reviewed current code against `HANDOFF.md`, `specs/phase-5.md`, and
+  all four Phase 5 task specs.
+- Re-ran deterministic validation:
+  - `.venv/bin/python -m compileall labcam tools`
+  - `node --check labcam/web/static/status.js`
+  - `node --check labcam/web/static/new.js`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches.
+  - `.venv/bin/python tools/phase5_driver.py` passed 12/12 scenarios.
+- No code changes were made. Findings were reported in chat.
+
+### 2026-05-29 — Phase 5 review findings fixed
+
+- Fixed idle configured-camera availability surfacing. The dashboard
+  status path now probes idle configured cameras through the camera
+  boundary and marks unavailable cameras as `camera_unavailable` /
+  `offline`; `labcam.main` prints a startup warning for unavailable
+  configured cameras.
+- Fixed clean shutdown waiting. `shutdown_cleanly()` now waits for the
+  scheduler/current capture path to finish before finalizing active
+  experiments as `stopped_early`.
+- Tightened storage-failure classification. Clear filesystem/storage
+  failures still stop the affected experiment with `disk_full` or
+  `storage_failed`; unclear JPEG-save exceptions now follow ordinary
+  capture retry / sequence-gap behavior.
+- Expanded `tools/phase5_driver.py` from 12 to 15 deterministic
+  scenarios to cover idle unavailable cameras, unclear save failures,
+  and clean shutdown waiting past the old five-second timeout.
+- Validation passed:
+  - `.venv/bin/python -m compileall labcam tools`
+  - `node --check labcam/web/static/status.js`
+  - `node --check labcam/web/static/new.js`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches.
+  - `rg "platform\\.system|sys\\.platform|os\\.name" -n labcam tools`
+    reports only `labcam/cameras/interface.py`.
+  - `.venv/bin/python tools/phase5_driver.py` passed 15/15 scenarios.
+  - `.venv/bin/python tools/phase2_driver.py --profile fast
+    --mock-capture --cameras station1 station2` passed 6/6 scenarios.
+- Real Windows hardware validation is still pending for disconnect /
+  replug behavior, reboot/index-fallback preview verification, and final
+  lab-machine smoke testing. Lab-staff README dry-run is also pending.
+- No push was performed.
