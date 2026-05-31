@@ -6,11 +6,12 @@ from typing import Any
 
 import cv2
 
+from labcam.paths import DEFAULT_SETTINGS_PATH
+
 
 DEFAULT_WARMUP_FRAMES = 5
 DEFAULT_JPEG_QUALITY = 90
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SETTINGS_PATH = PROJECT_ROOT / "config" / "settings.json"
+SETTINGS_PATH = DEFAULT_SETTINGS_PATH
 
 
 class CameraCaptureError(RuntimeError):

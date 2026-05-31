@@ -8,12 +8,12 @@ from pathlib import Path
 from labcam.cameras.interface import camera_info_to_dict, list_cameras, preview_frame, save_jpeg
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Fresh-process camera probe.")
     parser.add_argument("--preview-index", type=int)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--quality", type=int)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.preview_index is not None:
         if args.output is None:

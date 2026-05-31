@@ -504,3 +504,18 @@ them here so a future session can revisit if any feel wrong.
   writable app data); source-only setup (still too developer-oriented
   for lab operators); a tray/window wrapper (more app surface than needed
   for the current Flask dashboard).
+
+### 31. Packaged runtime writes beside the executable
+
+- **Decided:** Source runs continue to resolve runtime paths from the
+  repository root, while PyInstaller runs resolve writable runtime paths
+  from the folder containing `LabImaging.exe`.
+- **Why:** The portable folder is the operator-facing app. Keeping
+  `config/`, `experiments/`, `logs/`, and `running_state.json` beside
+  the executable makes runtime state visible and avoids writing inside
+  PyInstaller internals.
+- **Considered and rejected:** Writing into PyInstaller's internal
+  bundle folder (not operator-visible and not intended for runtime
+  state); changing source runs to use the current working directory
+  (would break existing Mac/developer behavior); adding a formal
+  installer app-data directory (outside Phase 7 scope).

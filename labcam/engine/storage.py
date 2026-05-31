@@ -10,10 +10,9 @@ from pathlib import Path
 from typing import Any, Callable
 
 from labcam.cameras.interface import save_jpeg
+from labcam.paths import DEFAULT_EXPERIMENTS_DIR
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_EXPERIMENTS_DIR = PROJECT_ROOT / "experiments"
 DEFAULT_JPEG_QUALITY = 90
 POST_NOTES_FILENAME = "post_notes.txt"
 

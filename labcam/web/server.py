@@ -23,7 +23,6 @@ from labcam.engine import (
     ExperimentNotFoundError,
     ExperimentStateError,
 )
-from labcam.engine.scheduler import PROJECT_ROOT
 from labcam.engine.settings import (
     CAPTURE_DEFAULT_SETTINGS,
     EDITABLE_SETTINGS_ORDER,
@@ -39,6 +38,7 @@ from labcam.engine.storage import (
     sanitize_name,
     write_post_notes,
 )
+from labcam.paths import PROJECT_ROOT
 
 
 EXPERIMENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")

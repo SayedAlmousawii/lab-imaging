@@ -7,10 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from labcam.engine.storage import atomic_write_json
+from labcam.paths import DEFAULT_SETTINGS_EXAMPLE_PATH, PROJECT_ROOT
 
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_SETTINGS_EXAMPLE_PATH = PROJECT_ROOT / "config" / "settings.json.example"
 
 CAPTURE_DEFAULT_SETTINGS = (
     "default_interval_minutes",

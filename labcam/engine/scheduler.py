@@ -49,11 +49,9 @@ from labcam.engine.storage import (
     StorageError,
 )
 from labcam.engine.settings import load_effective_settings, resolve_experiments_dir
+from labcam.paths import DEFAULT_CAMERAS_PATH, DEFAULT_SETTINGS_PATH, PROJECT_ROOT
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_SETTINGS_PATH = PROJECT_ROOT / "config" / "settings.json"
-DEFAULT_CAMERAS_PATH = PROJECT_ROOT / "config" / "cameras.json"
 DEFAULT_CAPTURE_RETRIES = 2
 CONSERVATIVE_BYTES_PER_IMAGE = 8_000_000
 LOW_FREE_BYTES = 1_000_000

@@ -5,10 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from labcam.engine import storage
-
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_STATE_PATH = PROJECT_ROOT / "config" / "running_state.json"
+from labcam.paths import DEFAULT_STATE_PATH
 
 
 class RunningStateError(RuntimeError):

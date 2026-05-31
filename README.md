@@ -9,10 +9,40 @@ software.
 The v1 system is designed for one Windows lab computer with USB cameras
 connected locally.
 
-## Pre-Packaging Installation
+## Portable Windows Package
 
-Until the portable Windows package exists, Lab Imaging runs from the
-source folder with Python 3.11.
+For lab operators, the preferred Phase 7 path is the portable Windows
+folder built from this source tree.
+
+On the Windows build machine, open PowerShell in the project folder and
+run:
+
+```powershell
+.\packaging\build-windows-portable.ps1
+```
+
+The build creates:
+
+```text
+dist\LabImagingPortable\
+```
+
+Copy or zip the whole `LabImagingPortable` folder for lab use. Lab
+operators start the app by double-clicking:
+
+```text
+Start Lab Imaging.bat
+```
+
+The finished portable folder does not require Python, Git, or developer
+commands on the computer that runs it.
+
+Do not commit generated `dist\` output to git.
+
+## Source Installation
+
+For development, validation, or pre-release troubleshooting, Lab Imaging
+can still run from the source folder with Python 3.11.
 
 1. Download or clone the repository onto the lab computer.
 2. Open PowerShell in the Lab Imaging folder.
