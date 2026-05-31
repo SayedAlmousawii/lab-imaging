@@ -75,6 +75,14 @@ def create_app(engine: CaptureEngine) -> Flask:
     def settings_page() -> str:
         return render_template("settings.html")
 
+    @app.get("/experiments")
+    def experiments_page() -> str:
+        return render_template("experiments.html")
+
+    @app.get("/experiments/<experiment_id>")
+    def experiment_detail_page(experiment_id: str) -> str:
+        return render_template("experiment_detail.html", experiment_id=experiment_id)
+
     @app.get("/verify-cameras")
     def verify_cameras_page() -> str:
         return render_template("verify.html")
@@ -241,6 +249,30 @@ def create_app(engine: CaptureEngine) -> Flask:
             return _error("unknown_camera", _camera_config_message(exc), 400)
         return jsonify(preview)
 
+    @app.get("/api/experiments")
+    def api_experiment_browser() -> Response:
+        return jsonify(_experiment_browser_payload(
+            engine,
+            date_filter=str(request.args.get("date") or "").strip(),
+            station_filter=str(request.args.get("station") or "").strip(),
+        ))
+
+    @app.get("/api/experiments/<experiment_id>")
+    def api_experiment_detail(experiment_id: str) -> Response:
+        try:
+            folder = _experiment_folder(engine, experiment_id)
+            record = _experiment_record(
+                engine,
+                folder,
+                runtime=_runtime_experiments_by_id(engine).get(experiment_id),
+                include_detail=True,
+            )
+        except ValueError as exc:
+            return _error("invalid_experiment_id", str(exc), 400)
+        except ExperimentNotFoundError as exc:
+            return _error("not_found", str(exc), 404)
+        return jsonify({"experiment": record})
+
     @app.post("/api/experiments/<experiment_id>/stop")
     def api_stop_experiment(experiment_id: str) -> Response:
         try:
@@ -265,7 +297,12 @@ def create_app(engine: CaptureEngine) -> Flask:
         try:
             latest = engine.latest_frame_path(experiment_id)
         except ExperimentNotFoundError as exc:
-            return _error("not_found", str(exc), 404)
+            try:
+                latest = _latest_experiment_image(_experiment_folder(engine, experiment_id))
+            except ValueError as folder_exc:
+                return _error("invalid_experiment_id", str(folder_exc), 400)
+            except ExperimentNotFoundError:
+                return _error("not_found", str(exc), 404)
         if latest is None or not latest.exists():
             return _error("no_frame", "No captured frame is available yet", 404)
         return send_file(latest, mimetype="image/jpeg", max_age=0)
@@ -406,6 +443,241 @@ def _configured_camera_payload(engine: CaptureEngine) -> list[dict[str, Any]]:
         }
         for camera in engine.list_cameras()
     ]
+
+
+def _experiment_browser_payload(
+    engine: CaptureEngine,
+    *,
+    date_filter: str = "",
+    station_filter: str = "",
+) -> dict[str, Any]:
+    root = engine.experiments_dir.resolve()
+    runtime_by_id = _runtime_experiments_by_id(engine)
+    records = [
+        _experiment_record(engine, folder, runtime=runtime_by_id.get(folder.name))
+        for folder in _experiment_folders(root)
+    ]
+    records.sort(key=_experiment_sort_key, reverse=True)
+
+    dates = sorted({record["date"] for record in records if record.get("date")}, reverse=True)
+    stations = sorted({record["camera_label"] for record in records if record.get("camera_label")})
+
+    filtered = records
+    if date_filter:
+        filtered = [record for record in filtered if record.get("date") == date_filter]
+    if station_filter:
+        filtered = [record for record in filtered if record.get("camera_label") == station_filter]
+
+    return {
+        "experiments_dir": str(root),
+        "filters": {"date": date_filter, "station": station_filter},
+        "dates": dates,
+        "stations": stations,
+        "experiments": filtered,
+        "total_count": len(records),
+        "filtered_count": len(filtered),
+    }
+
+
+def _experiment_folders(root: Path) -> list[Path]:
+    if not root.exists() or not root.is_dir():
+        return []
+    return [
+        child
+        for child in root.iterdir()
+        if child.is_dir() and EXPERIMENT_ID_PATTERN.fullmatch(child.name)
+    ]
+
+
+def _runtime_experiments_by_id(engine: CaptureEngine) -> dict[str, dict[str, Any]]:
+    return {
+        str(experiment.get("experiment_id")): experiment
+        for experiment in engine.list_experiments()
+        if experiment.get("experiment_id")
+    }
+
+
+def _experiment_record(
+    engine: CaptureEngine,
+    folder: Path,
+    *,
+    runtime: dict[str, Any] | None = None,
+    include_detail: bool = False,
+) -> dict[str, Any]:
+    parsed = _parse_experiment_folder_name(folder.name)
+    metadata_path = folder / "metadata.json"
+    metadata: dict[str, Any] = {}
+    warnings: list[str] = []
+    metadata_status = "missing"
+
+    if metadata_path.exists():
+        try:
+            metadata = read_json_file(metadata_path)
+        except (json.JSONDecodeError, OSError, StorageError):
+            warnings.append("metadata.json could not be read. This folder may be incomplete.")
+            metadata_status = "malformed"
+        else:
+            metadata_status = "ok"
+    else:
+        warnings.append("metadata.json is missing. This folder may be incomplete.")
+
+    name = str(metadata.get("name") or parsed["name"] or folder.name)
+    camera_label = str(metadata.get("camera_label") or parsed["camera_label"] or "")
+    started_at = _metadata_or_runtime(metadata, runtime, "started_at")
+    planned_stop_at = _metadata_or_runtime(metadata, runtime, "planned_stop_at")
+    ended_at = _metadata_or_runtime(metadata, runtime, "ended_at")
+    end_reason = _metadata_or_runtime(metadata, runtime, "end_reason")
+    images = _experiment_images(folder)
+    image_count = _int_or_count(metadata.get("images_captured"), len(images))
+
+    if runtime:
+        image_count = int(runtime.get("images_captured") or image_count)
+        if runtime.get("status") == "capturing":
+            end_reason = ""
+
+    date_value = _date_from_timestamp(started_at) or parsed["date"]
+    status = _experiment_status_label(
+        metadata_status=metadata_status,
+        runtime_status=str(runtime.get("status") if runtime else ""),
+        ended_at=ended_at,
+        end_reason=end_reason,
+    )
+    latest = images[-1] if images else None
+    has_post_notes = (folder / POST_NOTES_FILENAME).exists()
+    is_terminal = bool(ended_at and end_reason and status != "incomplete")
+
+    record: dict[str, Any] = {
+        "experiment_id": folder.name,
+        "name": name,
+        "date": date_value,
+        "camera_label": camera_label,
+        "status": status,
+        "end_reason": end_reason or None,
+        "images_captured": image_count,
+        "folder": str(folder),
+        "metadata_status": metadata_status,
+        "warnings": warnings,
+        "started_at": started_at or None,
+        "planned_stop_at": planned_stop_at or None,
+        "ended_at": ended_at or None,
+        "latest_image_url": f"/api/experiments/{folder.name}/latest" if latest else None,
+        "detail_url": f"/experiments/{folder.name}",
+        "post_notes_url": f"/experiments/{folder.name}/notes" if is_terminal else None,
+        "has_post_notes": has_post_notes,
+    }
+
+    if include_detail:
+        record["metadata"] = metadata
+        record["capture_log"] = _capture_log_summary(folder / "capture_log.txt")
+        record["post_notes"] = read_post_notes(folder) if has_post_notes else ""
+        record["latest_image"] = latest.name if latest else None
+    return record
+
+
+def _metadata_or_runtime(
+    metadata: dict[str, Any],
+    runtime: dict[str, Any] | None,
+    key: str,
+) -> str:
+    value = metadata.get(key)
+    if (value is None or value == "") and runtime:
+        value = runtime.get(key)
+    return str(value or "")
+
+
+def _parse_experiment_folder_name(folder_name: str) -> dict[str, str]:
+    parts = folder_name.split("_")
+    date_value = parts[0] if parts and re.fullmatch(r"\d{4}-\d{2}-\d{2}", parts[0]) else ""
+    if len(parts) < 3:
+        return {"date": date_value, "name": "", "camera_label": ""}
+
+    body = parts[1:]
+    if len(body) >= 3 and body[-1].isdigit():
+        body = body[:-1]
+    camera_label = body[-1] if body else ""
+    name = "_".join(body[:-1])
+    return {"date": date_value, "name": name, "camera_label": camera_label}
+
+
+def _experiment_images(folder: Path) -> list[Path]:
+    images_dir = folder / "images"
+    if not images_dir.exists() or not images_dir.is_dir():
+        return []
+    return sorted(path for path in images_dir.glob("*.jpg") if path.is_file())
+
+
+def _latest_experiment_image(folder: Path) -> Path | None:
+    images = _experiment_images(folder)
+    return images[-1] if images else None
+
+
+def _int_or_count(value: Any, fallback: int) -> int:
+    try:
+        result = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return result if result >= 0 else fallback
+
+
+def _date_from_timestamp(value: str) -> str:
+    if re.match(r"^\d{4}-\d{2}-\d{2}", value or ""):
+        return value[:10]
+    return ""
+
+
+def _experiment_status_label(
+    *,
+    metadata_status: str,
+    runtime_status: str,
+    ended_at: str,
+    end_reason: str,
+) -> str:
+    if metadata_status != "ok":
+        return "incomplete"
+    if runtime_status == "capturing":
+        return "running"
+    if not ended_at or not end_reason:
+        return "incomplete"
+    if end_reason in {"baseline_failed", "disk_full", "storage_failed", "unknown"}:
+        return "failed"
+    if end_reason == "stopped_early":
+        return "stopped"
+    return "completed"
+
+
+def _capture_log_summary(log_path: Path) -> dict[str, Any]:
+    try:
+        lines = log_path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return {
+            "available": False,
+            "line_count": 0,
+            "error_count": 0,
+            "recent_lines": [],
+            "warning": "capture_log.txt is missing.",
+        }
+    except OSError as exc:
+        return {
+            "available": False,
+            "line_count": 0,
+            "error_count": 0,
+            "recent_lines": [],
+            "warning": f"capture_log.txt could not be read: {exc}",
+        }
+    return {
+        "available": True,
+        "line_count": len(lines),
+        "error_count": sum(1 for line in lines if " ERROR " in line),
+        "recent_lines": lines[-8:],
+        "warning": None,
+    }
+
+
+def _experiment_sort_key(record: dict[str, Any]) -> tuple[str, str]:
+    return (
+        str(record.get("started_at") or record.get("date") or ""),
+        str(record.get("experiment_id") or ""),
+    )
 
 
 def _station_status(engine: CaptureEngine) -> list[dict[str, Any]]:

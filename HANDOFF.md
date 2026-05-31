@@ -14,8 +14,8 @@ changed (write "no changes this session" explicitly under that date).
   Task 4, Task 5, and Task 6, including dashboard hot-plug detection,
   detected-preview, stale camera-row/preview/draft-input guards, the
   Settings page, configurable experiment save location,
-  cloud-synced storage guidance, and post-experiment notes, are
-  implemented locally.
+  cloud-synced storage guidance, post-experiment notes, and the
+  read-only experiment browser are implemented locally.
 - **Current branch:** `phase-6-dashboard-workflows`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
@@ -24,7 +24,7 @@ changed (write "no changes this session" explicitly under that date).
   approved Terminal can run the real-camera driver successfully. Manual
   Terminal-hosted post-fix stale-row/hot-plug preview and draft-input
   validation is pending.
-- **Next actions:** Implement Phase 6 Task 7: experiment browser.
+- **Next actions:** Implement Phase 6 Task 8: maintenance mode.
 
 ---
 
@@ -1127,6 +1127,48 @@ changed (write "no changes this session" explicitly under that date).
   - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
   - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
     matches.
+- Manual real-camera stale-row/hot-plug preview and draft-input
+  validation remains pending from Task 2 because the Codex app process
+  lacks macOS camera permission.
+- No push was performed.
+
+### 2026-05-31 — Phase 6 Task 7 experiment browser implemented
+
+- Added the read-only dashboard experiment browser:
+  `/experiments`, `/experiments/<experiment_id>`,
+  `GET /api/experiments`, and
+  `GET /api/experiments/<experiment_id>`.
+- The browser scans the configured `experiments_dir` directly. It lists
+  immediate experiment folders, filters by date and station, shows
+  status/end reason, image count, folder path, metadata, capture-log
+  summary, post-run notes, and the latest still only.
+- Missing or malformed `metadata.json` folders are shown as incomplete
+  with warnings instead of crashing the page.
+- `GET /api/experiments/<experiment_id>/latest` still serves active
+  in-memory experiment frames and now falls back to the latest
+  `images/*.jpg` for historical folders.
+- Added `tools/phase6_task7_driver.py` covering list, filters, detail,
+  latest stills, malformed folders, large image counts, read-only route
+  behavior, and invalid/traversal id rejection.
+- In-app browser smoke validation passed on a temporary dashboard server
+  at `http://127.0.0.1:5057`: `/experiments` rendered local experiment
+  folders, and a detail page rendered the latest still and log summary.
+- Validation passed:
+  - `.venv/bin/python tools/phase6_task7_driver.py` passed 6/6
+    scenarios.
+  - `.venv/bin/python -m compileall labcam tools`
+  - `node --check labcam/web/static/experiments.js`
+  - `node --check labcam/web/static/experiment_detail.js`
+  - `.venv/bin/python tools/phase6_task6_driver.py` passed 7/7
+    scenarios.
+  - `git diff --check`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches.
+  - `rg "platform\\.system|sys\\.platform|os\\.name" -n labcam tools`
+    reports only `labcam/cameras/interface.py`.
 - Manual real-camera stale-row/hot-plug preview and draft-input
   validation remains pending from Task 2 because the Codex app process
   lacks macOS camera permission.
