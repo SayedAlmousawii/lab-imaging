@@ -16,12 +16,12 @@ from labcam.cameras.base_capture import (
     save_jpeg_image,
     windows_backend,
 )
+from labcam.paths import PROJECT_ROOT, is_frozen
 
 
 IdentityStrategy = Literal["hardware_id", "usb_port", "index_fallback"]
 
 _CAPTURE_LOCK = Lock()
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 @dataclass(frozen=True)
@@ -53,7 +53,7 @@ def list_cameras() -> list[CameraInfo]:
 
 def list_cameras_fresh_process(*, timeout_seconds: float = 30) -> list[CameraInfo]:
     result = subprocess.run(
-        [sys.executable, "-m", "labcam.cameras.probe"],
+        _probe_command(),
         check=False,
         capture_output=True,
         text=True,
@@ -82,15 +82,7 @@ def preview_camera_fresh_process(
     quality: int | None = None,
     timeout_seconds: float = 30,
 ) -> Path:
-    command = [
-        sys.executable,
-        "-m",
-        "labcam.cameras.probe",
-        "--preview-index",
-        str(camera_index),
-        "--output",
-        str(output_path),
-    ]
+    command = _probe_command("--preview-index", str(camera_index), "--output", str(output_path))
     if quality is not None:
         command.extend(["--quality", str(quality)])
 
@@ -212,3 +204,9 @@ def _backend_for_current_platform() -> int | None:
         return windows_backend()
 
     return None
+
+
+def _probe_command(*args: str) -> list[str]:
+    if is_frozen():
+        return [sys.executable, "--camera-probe", *args]
+    return [sys.executable, "-m", "labcam.cameras.probe", *args]

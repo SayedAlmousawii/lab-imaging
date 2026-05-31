@@ -9,21 +9,23 @@ changed (write "no changes this session" explicitly under that date).
 
 ## Current state
 
-- **Current phase:** Phase 7 — portable Windows packaging planning.
-  Phase 6 has been merged to `main` by the human. Phase 7 currently has
-  a docs-only packaging spec for the first user-friendly portable
-  Windows folder; no packaging implementation has started.
-- **Current branch:** `phase-7-portable-windows-packaging`.
+- **Current phase:** Phase 7 — portable Windows packaging
+  implementation. The Mac/source run path remains supported, and the
+  Windows portable-package source changes are implemented locally.
+- **Current branch:** `phase-7-portable-windows-packaging-impl`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
   camera at index 2; it is excluded from the current lab camera mapping.
   The Codex app process still lacks macOS camera permission, but the
   approved Terminal can run the real-camera driver successfully. Manual
   Terminal-hosted post-fix stale-row/hot-plug preview and draft-input
-  validation is pending.
-- **Next actions:** Implement Phase 7 portable packaging from
-  `specs/phase-7-portable-windows-packaging.md` only after the human
-  asks for implementation.
+  validation is pending. Windows PyInstaller build and real-camera
+  portable-package validation are still pending on the Windows lab
+  machine.
+- **Next actions:** On Windows, run
+  `.\packaging\build-windows-portable.ps1`, then validate
+  `dist\LabImagingPortable\` with real lab cameras before treating the
+  portable package as usable.
 
 ---
 
@@ -1313,3 +1315,63 @@ changed (write "no changes this session" explicitly under that date).
 - Direct push to `main` was requested but not performed because
   `AGENTS.md` forbids direct pushes to `main`; this change remains on
   `phase-7-portable-windows-packaging`.
+
+### 2026-05-31 — Phase 7 portable packaging implemented
+
+- Created fresh implementation branch
+  `phase-7-portable-windows-packaging-impl` from current `main` because
+  the earlier Phase 7 planning branch had already been merged.
+- Added `labcam/paths.py` so source runs use the repo root and frozen
+  PyInstaller runs use the folder containing `LabImaging.exe` for
+  writable runtime files.
+- Updated settings, camera config, running-state, experiment output,
+  and camera capture settings paths to resolve through the shared path
+  helper while preserving `python -m labcam.main` for Mac/source runs.
+- Added `labcam/portable_launcher.py` as the packaged entry point. It
+  starts the existing Flask dashboard, opens the browser after the
+  server responds, and supports an internal `--camera-probe` mode for
+  packaged fresh-process camera detection.
+- Added build-only packaging files under `packaging/`:
+  `LabImaging.spec`, `build-windows-portable.ps1`,
+  `Start Lab Imaging.bat`, and `README-START-HERE.txt`.
+- Updated `.gitignore` so generated `build/` and `dist/` output stays
+  out of git.
+- Updated `README.md` to describe the portable Windows package path and
+  retain source installation for development/validation.
+- Logged decision #31 in `DECISIONS.md`: packaged runtime files write
+  beside the executable, not inside PyInstaller internals.
+- Validation passed:
+  - `.venv/bin/python -m compileall labcam tools`
+  - `node --check labcam/web/static/status.js`
+  - `node --check labcam/web/static/new.js`
+  - `node --check labcam/web/static/settings.js`
+  - `node --check labcam/web/static/cameras.js`
+  - `node --check labcam/web/static/experiments.js`
+  - `node --check labcam/web/static/experiment_detail.js`
+  - `node --check labcam/web/static/experiment_notes.js`
+  - `node --check labcam/web/static/verify.js`
+  - `.venv/bin/python tools/phase5_driver.py` passed 15/15 scenarios.
+  - `.venv/bin/python tools/phase6_task1_driver.py` passed 5/5
+    scenarios.
+  - `.venv/bin/python tools/phase6_task2_driver.py` passed 9/9
+    scenarios.
+  - `.venv/bin/python tools/phase6_task3_driver.py` passed 6/6
+    scenarios.
+  - `.venv/bin/python tools/phase6_task4_driver.py` passed 7/7
+    scenarios.
+  - `.venv/bin/python tools/phase6_task5_driver.py` passed 3/3
+    scenarios.
+  - `.venv/bin/python tools/phase6_task6_driver.py` passed 7/7
+    scenarios.
+  - `.venv/bin/python tools/phase6_task7_driver.py` passed 6/6
+    scenarios.
+  - `.venv/bin/python tools/phase6_task8_driver.py` passed 9/9
+    scenarios.
+  - `git diff --check`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches.
+- Windows packaging build and real-camera portable-folder validation
+  were not run in this Mac environment. No push was performed.
