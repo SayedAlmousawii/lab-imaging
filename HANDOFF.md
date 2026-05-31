@@ -1302,3 +1302,14 @@ changed (write "no changes this session" explicitly under that date).
   runtime-path implementation was added.
 - Validation passed: `git diff --check`.
 - No push was performed.
+
+### 2026-05-31 — README installation-guide check
+
+- Reviewed `README.md` and `CONTRIBUTING.md` for current pre-packaging
+  install/run guidance.
+- Added a `README.md` Pre-Packaging Installation section with Windows
+  source setup steps for Python 3.11, `.venv`, dependency installation,
+  and dashboard startup.
+- Direct push to `main` was requested but not performed because
+  `AGENTS.md` forbids direct pushes to `main`; this change remains on
+  `phase-7-portable-windows-packaging`.

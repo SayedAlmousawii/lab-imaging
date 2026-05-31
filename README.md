@@ -9,6 +9,40 @@ software.
 The v1 system is designed for one Windows lab computer with USB cameras
 connected locally.
 
+## Pre-Packaging Installation
+
+Until the portable Windows package exists, Lab Imaging runs from the
+source folder with Python 3.11.
+
+1. Download or clone the repository onto the lab computer.
+2. Open PowerShell in the Lab Imaging folder.
+3. Create the virtual environment:
+
+```powershell
+py -3.11 -m venv .venv
+```
+
+4. Activate it:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+5. Install dependencies:
+
+```powershell
+pip install -r requirements.txt
+```
+
+6. Start the dashboard:
+
+```powershell
+python -m labcam.main
+```
+
+If PowerShell says `py` or Python 3.11 is missing, install Python 3.11
+for Windows first, then repeat the setup steps.
+
 ## Daily Use
 
 1. Start the lab computer and connect the cameras.
