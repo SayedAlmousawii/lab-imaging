@@ -30,6 +30,7 @@ from labcam.engine.experiment import (
     Experiment,
     ExperimentConfig,
     ExperimentNotFoundError,
+    ExperimentStateError,
 )
 from labcam.engine.state import DEFAULT_STATE_PATH, RunningStateManager
 from labcam.engine.storage import (
@@ -42,6 +43,7 @@ from labcam.engine.storage import (
     iso_timestamp,
     local_now,
     save_frame_as_jpeg,
+    update_metadata_maintenance_events,
     update_metadata_finalize,
     write_metadata,
     StorageError,
@@ -452,6 +454,66 @@ class CaptureEngine:
             experiment.stop_requested = True
             self._wake.set()
 
+    def enter_maintenance(self, experiment_id: str, *, note: str = "") -> dict[str, object]:
+        with self._lock:
+            experiment = self._active.get(experiment_id)
+            if experiment is None:
+                raise ExperimentNotFoundError(f"Unknown running experiment: {experiment_id}")
+            started_at = self.now_func()
+            event = experiment.enter_maintenance(started_at=started_at, note=note)
+
+        try:
+            update_metadata_maintenance_events(
+                experiment.paths.metadata_path,
+                experiment.maintenance_events,
+            )
+            append_log_line(
+                experiment.paths.log_path,
+                started_at,
+                "MAINT",
+                f"start note={_log_value(experiment.maintenance_note)}",
+            )
+            self.state.replace_entry(experiment.to_running_state())
+        except Exception:
+            with self._lock:
+                if experiment.status == "maintenance":
+                    experiment.status = "capturing"
+                    experiment.maintenance_started_at = None
+                    experiment.maintenance_note = ""
+                    experiment.maintenance_skipped_capture_count = 0
+                    if experiment.maintenance_events and experiment.maintenance_events[-1] is event:
+                        experiment.maintenance_events.pop()
+            raise
+
+        self._wake.set()
+        return experiment.to_status()
+
+    def resume_maintenance(self, experiment_id: str) -> dict[str, object]:
+        with self._lock:
+            experiment = self._active.get(experiment_id)
+            if experiment is None:
+                raise ExperimentNotFoundError(f"Unknown running experiment: {experiment_id}")
+            resumed_at = self.now_func()
+            event = experiment.resume_from_maintenance(resumed_at=resumed_at)
+
+        update_metadata_maintenance_events(
+            experiment.paths.metadata_path,
+            experiment.maintenance_events,
+        )
+        append_log_line(
+            experiment.paths.log_path,
+            resumed_at,
+            "MAINT",
+            (
+                "end "
+                f"skipped_captures={event.get('skipped_capture_count', 0)} "
+                f"note={_log_value(str(event.get('note') or ''))}"
+            ),
+        )
+        self.state.replace_entry(experiment.to_running_state())
+        self._wake.set()
+        return experiment.to_status()
+
     def list_experiments(self) -> list[dict[str, object]]:
         with self._lock:
             experiments = list(self._active.values()) + list(self._finished.values())
@@ -515,6 +577,26 @@ class CaptureEngine:
                 for experiment in self._active.values():
                     if experiment.stop_requested:
                         finalize_stopped.append(experiment)
+                        continue
+                    if experiment.status == "maintenance":
+                        skipped = experiment.record_maintenance_skips_until(now)
+                        if skipped:
+                            try:
+                                self.state.replace_entry(experiment.to_running_state())
+                            except Exception as exc:
+                                failure = self._storage_failure(exc, experiment.paths.root)
+                                if failure is None:
+                                    raise
+                                finalize_stopped.append(experiment)
+                                experiment.mark_terminal_health(
+                                    message=failure.message,
+                                    failed_at=now,
+                                )
+                                continue
+                        if now >= experiment.planned_stop_at:
+                            finalize_completed.append(experiment)
+                        else:
+                            sleep_seconds = min(sleep_seconds, self.poll_floor_seconds)
                         continue
                     if experiment.tick(now):
                         due.append(experiment)
@@ -677,6 +759,30 @@ class CaptureEngine:
                 return
 
         ended_at = self.now_func()
+        maintenance_event = None
+        if experiment.status == "maintenance":
+            maintenance_event = experiment.close_maintenance(ended_at=ended_at)
+            if maintenance_event:
+                try:
+                    update_metadata_maintenance_events(
+                        experiment.paths.metadata_path,
+                        experiment.maintenance_events,
+                    )
+                    append_log_line(
+                        experiment.paths.log_path,
+                        ended_at,
+                        "MAINT",
+                        (
+                            f"end reason={reason} "
+                            f"skipped_captures={maintenance_event.get('skipped_capture_count', 0)} "
+                            f"note={_log_value(str(maintenance_event.get('note') or ''))}"
+                        ),
+                    )
+                except Exception as exc:
+                    self._record_finalization_error(
+                        experiment,
+                        f"maintenance update failed: {_storage_error_message(exc)}",
+                    )
         experiment.finalize(reason, ended_at)
         if health_message:
             experiment.mark_terminal_health(message=health_message, failed_at=ended_at)
@@ -936,6 +1042,11 @@ def _format_minutes(value: float) -> str:
 
 def _format_hours(value: float) -> str:
     return f"{int(value)}h" if float(value).is_integer() else f"{value:g}h"
+
+
+def _log_value(value: str) -> str:
+    cleaned = " ".join(str(value or "").split())
+    return json.dumps(cleaned)
 
 
 def _capture_error_message(exc: Exception) -> str:

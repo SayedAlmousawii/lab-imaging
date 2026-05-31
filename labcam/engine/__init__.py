@@ -6,6 +6,7 @@ from labcam.engine.experiment import (
     EngineError,
     ExperimentConfig,
     ExperimentNotFoundError,
+    ExperimentStateError,
 )
 from labcam.engine.scheduler import CaptureEngine
 
@@ -18,4 +19,5 @@ __all__ = [
     "EngineError",
     "ExperimentConfig",
     "ExperimentNotFoundError",
+    "ExperimentStateError",
 ]

@@ -520,6 +520,7 @@ body {
 /* Card edge accent — left strip indicating status, very thin */
 .station[data-state="idle"]       { }
 .station[data-state="running"]    { box-shadow: inset 3px 0 0 var(--running); }
+.station[data-state="maintenance"] { box-shadow: inset 3px 0 0 var(--warn); }
 .station[data-state="done"]       { box-shadow: inset 3px 0 0 var(--done); }
 .station[data-state="warn"]       { box-shadow: inset 3px 0 0 var(--warn); }
 .station[data-state="error"]      { box-shadow: inset 3px 0 0 var(--danger); }

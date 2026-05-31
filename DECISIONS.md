@@ -452,3 +452,20 @@ them here so a future session can revisit if any feel wrong.
   blank saves (harder to distinguish meaningful notes from cleared
   notes); rewriting `metadata.json` to track note state (unnecessary
   metadata churn).
+
+### 28. Maintenance skips are logged as windows, not sequence gaps
+
+- **Decided:** Phase 6 maintenance mode does not create image sequence
+  gaps for intentionally skipped scheduled captures. Each maintenance
+  window records `started_at`, `ended_at`, operator note, and
+  `skipped_capture_count` in `metadata.json`, with matching audit lines
+  in `capture_log.txt`.
+- **Why:** Maintenance is an intentional operator pause, not a capture
+  failure. Keeping image sequence numbers contiguous preserves the
+  meaning that missing sequence numbers represent failed capture
+  attempts, while the maintenance event records why no images exist for
+  the pause window.
+- **Considered and rejected:** Advancing image sequence numbers for
+  every skipped scheduled time (would make planned maintenance look like
+  capture failures); logging only start/end without skipped counts (less
+  auditable for long adjustment windows).

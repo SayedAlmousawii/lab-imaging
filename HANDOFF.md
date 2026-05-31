@@ -10,12 +10,13 @@ changed (write "no changes this session" explicitly under that date).
 ## Current state
 
 - **Current phase:** Phase 6 — dashboard workflow features. Phase 5 is
-  considered complete by the human. Phase 6 Task 1, Task 2, Task 3,
-  Task 4, Task 5, and Task 6, including dashboard hot-plug detection,
-  detected-preview, stale camera-row/preview/draft-input guards, the
-  Settings page, configurable experiment save location,
-  cloud-synced storage guidance, post-experiment notes, and the
-  read-only experiment browser are implemented locally.
+  considered complete by the human. Phase 6 Task 1 through Task 8,
+  including dashboard hot-plug detection, detected-preview, stale
+  camera-row/preview/draft-input guards, the Settings page,
+  configurable experiment save location, cloud-synced storage guidance,
+  post-experiment notes, the read-only experiment browser, and
+  maintenance mode with maintenance-only fresh-still preview are
+  implemented locally.
 - **Current branch:** `phase-6-dashboard-workflows`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
@@ -24,7 +25,8 @@ changed (write "no changes this session" explicitly under that date).
   approved Terminal can run the real-camera driver successfully. Manual
   Terminal-hosted post-fix stale-row/hot-plug preview and draft-input
   validation is pending.
-- **Next actions:** Implement Phase 6 Task 8: maintenance mode.
+- **Next actions:** Implement Phase 6 Task 9: live preview / repeated
+  preview investigation, if the human wants to continue Phase 6.
 
 ---
 
@@ -1169,6 +1171,88 @@ changed (write "no changes this session" explicitly under that date).
     matches.
   - `rg "platform\\.system|sys\\.platform|os\\.name" -n labcam tools`
     reports only `labcam/cameras/interface.py`.
+- Manual real-camera stale-row/hot-plug preview and draft-input
+  validation remains pending from Task 2 because the Codex app process
+  lacks macOS camera permission.
+- No push was performed.
+
+### 2026-05-31 — Phase 6 Task 8 maintenance mode implemented
+
+- Implemented maintenance mode for active experiments on branch
+  `phase-6-dashboard-workflows`.
+- Added `CaptureEngine.enter_maintenance()` and
+  `CaptureEngine.resume_maintenance()`. Maintenance keeps the
+  experiment active, pauses scheduled captures, lets other stations keep
+  capturing, and supports stop-early finalization while paused.
+- Recorded the Phase 6 Task 8 sequence policy in `DECISIONS.md`:
+  intentional maintenance skips do not create image sequence gaps.
+  Instead, each window records start/end/note and skipped capture count
+  in `metadata.json` and `capture_log.txt`.
+- Added maintenance fields to active status and `running_state.json`;
+  startup recovery remains Option A and still finalizes stale running
+  entries as `unknown`.
+- Added dashboard API routes:
+  `POST /api/experiments/<id>/maintenance/start` and
+  `POST /api/experiments/<id>/maintenance/resume`.
+- Updated the station status page to show a distinct Maintenance state,
+  maintenance notes, skipped capture count, Resume, and Stop controls.
+  No live preview or repeated preview behavior was added.
+- Added `tools/phase6_task8_driver.py` with six deterministic scenarios.
+- Validation passed:
+  - `.venv/bin/python tools/phase6_task8_driver.py` passed 6/6
+    scenarios.
+  - `.venv/bin/python -m compileall labcam tools`
+  - `node --check labcam/web/static/status.js`
+  - `.venv/bin/python tools/phase5_driver.py` passed 15/15 scenarios.
+  - `.venv/bin/python tools/phase6_task6_driver.py` passed 7/7
+    scenarios.
+  - `.venv/bin/python tools/phase6_task7_driver.py` passed 6/6
+    scenarios.
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches.
+- Manual real-camera stale-row/hot-plug preview and draft-input
+  validation remains pending from Task 2 because the Codex app process
+  lacks macOS camera permission.
+- No push was performed.
+
+### 2026-05-31 — Phase 6 Task 8 maintenance preview follow-up implemented
+
+- Added a maintenance-only `Capture preview` action on the station
+  status card. It calls the existing `POST /api/preview` fresh-still
+  route and displays the returned still in the maintenance station
+  frame.
+- Preview remains open-grab-close and still routes through the existing
+  capture lock. No streaming endpoint, polling preview loop, camera
+  manager, or live-preview behavior was added.
+- Maintenance previews are temporary UI previews only. They are not
+  written into the experiment `images/` folder, do not advance image
+  sequence numbers, and do not change `metadata.json` image counts or
+  maintenance skipped counts.
+- Preview controls remain absent from ordinary running station cards;
+  operators can preview only while a station is in maintenance.
+- Failed maintenance previews show an inline dashboard error while the
+  experiment remains in maintenance mode.
+- Extended `tools/phase6_task8_driver.py` with maintenance preview
+  coverage. It now passes 9/9 deterministic scenarios.
+- Validation passed:
+  - `.venv/bin/python tools/phase6_task8_driver.py` passed 9/9
+    scenarios.
+  - `.venv/bin/python -m compileall labcam tools`
+  - `node --check labcam/web/static/status.js`
+  - `.venv/bin/python tools/phase5_driver.py` passed 15/15 scenarios.
+  - `.venv/bin/python tools/phase6_task6_driver.py` passed 7/7
+    scenarios.
+  - `.venv/bin/python tools/phase6_task7_driver.py` passed 6/6
+    scenarios.
+  - `git diff --check`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches.
 - Manual real-camera stale-row/hot-plug preview and draft-input
   validation remains pending from Task 2 because the Codex app process
   lacks macOS camera permission.

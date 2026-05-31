@@ -120,6 +120,7 @@ def build_metadata(
         "end_reason": end_reason,
         "images_captured": images_captured,
         "interval_seconds_effective": int(round(interval_minutes * 60)),
+        "maintenance_events": [],
     }
 
 
@@ -138,6 +139,16 @@ def update_metadata_finalize(
     metadata["ended_at"] = iso_timestamp(ended_at)
     metadata["end_reason"] = end_reason
     metadata["images_captured"] = images_captured
+    atomic_write_json(metadata_path, metadata)
+    return metadata
+
+
+def update_metadata_maintenance_events(
+    metadata_path: Path,
+    events: list[dict[str, Any]],
+) -> dict[str, Any]:
+    metadata = read_json_file(metadata_path)
+    metadata["maintenance_events"] = events
     atomic_write_json(metadata_path, metadata)
     return metadata
 

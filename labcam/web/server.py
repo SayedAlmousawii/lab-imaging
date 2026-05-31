@@ -21,6 +21,7 @@ from labcam.engine import (
     EngineError,
     ExperimentConfig,
     ExperimentNotFoundError,
+    ExperimentStateError,
 )
 from labcam.engine.scheduler import PROJECT_ROOT
 from labcam.engine.settings import (
@@ -285,6 +286,30 @@ def create_app(engine: CaptureEngine) -> Flask:
             return jsonify({"experiment_id": experiment_id, "status": "stopping"})
         return jsonify(status)
 
+    @app.post("/api/experiments/<experiment_id>/maintenance/start")
+    def api_start_maintenance(experiment_id: str) -> Response:
+        payload = _json_payload()
+        note = str(payload.get("note") or "").strip()
+        try:
+            return jsonify(engine.enter_maintenance(experiment_id, note=note))
+        except ExperimentNotFoundError as exc:
+            return _error("not_found", str(exc), 404)
+        except ExperimentStateError as exc:
+            return _error("invalid_state", str(exc), 409)
+        except OSError as exc:
+            return _error("maintenance_not_saved", f"Could not record maintenance mode: {exc}", 500)
+
+    @app.post("/api/experiments/<experiment_id>/maintenance/resume")
+    def api_resume_maintenance(experiment_id: str) -> Response:
+        try:
+            return jsonify(engine.resume_maintenance(experiment_id))
+        except ExperimentNotFoundError as exc:
+            return _error("not_found", str(exc), 404)
+        except ExperimentStateError as exc:
+            return _error("invalid_state", str(exc), 409)
+        except OSError as exc:
+            return _error("maintenance_not_saved", f"Could not record maintenance resume: {exc}", 500)
+
     @app.get("/api/status")
     def api_status() -> Response:
         return jsonify({
@@ -532,7 +557,7 @@ def _experiment_record(
 
     if runtime:
         image_count = int(runtime.get("images_captured") or image_count)
-        if runtime.get("status") == "capturing":
+        if runtime.get("status") in {"capturing", "maintenance"}:
             end_reason = ""
 
     date_value = _date_from_timestamp(started_at) or parsed["date"]
@@ -636,6 +661,8 @@ def _experiment_status_label(
         return "incomplete"
     if runtime_status == "capturing":
         return "running"
+    if runtime_status == "maintenance":
+        return "maintenance"
     if not ended_at or not end_reason:
         return "incomplete"
     if end_reason in {"baseline_failed", "disk_full", "storage_failed", "unknown"}:
@@ -686,12 +713,12 @@ def _station_status(engine: CaptureEngine) -> list[dict[str, Any]]:
     by_camera: dict[str, dict[str, Any]] = {}
     for experiment in experiments:
         camera_label = str(experiment.get("camera_label"))
-        if experiment.get("status") == "capturing":
+        if experiment.get("status") in {"capturing", "maintenance"}:
             by_camera[camera_label] = experiment
             continue
         current = by_camera.get(camera_label)
         if current is None or (
-            current.get("status") != "capturing"
+            current.get("status") not in {"capturing", "maintenance"}
             and _sort_time(experiment) >= _sort_time(current)
         ):
             by_camera[camera_label] = experiment
@@ -738,7 +765,7 @@ def _station_status(engine: CaptureEngine) -> list[dict[str, Any]]:
         latest_url = None
         if experiment.get("latest_frame_path"):
             latest_url = f"/api/experiments/{experiment['experiment_id']}/latest"
-        is_terminal = experiment.get("status") != "capturing"
+        is_terminal = experiment.get("status") not in {"capturing", "maintenance"}
         notes_url = (
             f"/experiments/{experiment['experiment_id']}/notes"
             if is_terminal and experiment.get("experiment_id")
@@ -766,15 +793,21 @@ def _station_status(engine: CaptureEngine) -> list[dict[str, Any]]:
                 "images_captured": experiment.get("images_captured"),
                 "remaining_seconds": (
                     max(0, int((planned_stop_at - now).total_seconds()))
-                    if planned_stop_at and state == "running"
+                    if planned_stop_at and state in {"running", "maintenance"}
                     else 0
                 ),
                 "ended_at": (
                     ended_at.isoformat(timespec="seconds")
-                    if ended_at and state != "running"
+                    if ended_at and state not in {"running", "maintenance"}
                     else None
                 ),
                 "next_capture_at": next_capture_at.isoformat(timespec="seconds") if next_capture_at else None,
+                "maintenance_started_at": experiment.get("maintenance_started_at"),
+                "maintenance_note": experiment.get("maintenance_note") or "",
+                "maintenance_skipped_capture_count": experiment.get(
+                    "maintenance_skipped_capture_count",
+                    0,
+                ),
                 "latest_url": latest_url,
                 "folder": experiment.get("folder"),
                 "end_reason": experiment.get("end_reason"),
@@ -809,7 +842,7 @@ def _post_notes_context(engine: CaptureEngine, experiment_id: str) -> dict[str, 
     for experiment in engine.list_experiments():
         if (
             experiment.get("experiment_id") == experiment_id
-            and experiment.get("status") == "capturing"
+            and experiment.get("status") in {"capturing", "maintenance"}
         ):
             raise ActiveExperimentError(
                 "Post-run notes are available after this experiment finishes."
@@ -849,7 +882,10 @@ def _wait_for_final_status(engine: CaptureEngine, experiment_id: str) -> dict[st
     deadline = datetime.now().astimezone().timestamp() + 3
     while datetime.now().astimezone().timestamp() < deadline:
         for experiment in engine.list_experiments():
-            if experiment.get("experiment_id") == experiment_id and experiment.get("status") != "capturing":
+            if (
+                experiment.get("experiment_id") == experiment_id
+                and experiment.get("status") not in {"capturing", "maintenance"}
+            ):
                 return experiment
         time.sleep(0.1)
     return None
@@ -882,6 +918,8 @@ def _identity_health_message(identity_strategy: str) -> str | None:
 def _station_state_for_health(experiment: dict[str, Any], health_state: str) -> str:
     if health_state == "camera_unavailable":
         return "offline"
+    if experiment.get("status") == "maintenance":
+        return "maintenance"
     if health_state == "capture_failing":
         return "error"
     if experiment.get("status") == "capturing":
