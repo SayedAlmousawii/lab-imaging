@@ -487,3 +487,20 @@ them here so a future session can revisit if any feel wrong.
   unvalidated production surface); auto-refreshing previews without
   bounded cadence and busy-state rules (could compete with scheduled
   capture in unclear ways).
+
+## 2026-05-31 — Packaging planning
+
+### 30. First user-friendly package is a portable Windows folder
+
+- **Decided:** The first user-friendly package should be a portable
+  Windows folder with `LabImaging.exe`, `Start Lab Imaging.bat`, visible
+  runtime folders, and automatic browser launch.
+- **Why:** The lab target is Windows, and the operator need is to run the
+  app without Git or Python commands. A portable folder is lower risk
+  than an installer because Lab Imaging already treats visible files and
+  folders as the operational model.
+- **Considered and rejected:** A formal installer as the first package
+  (more polish, but more decisions about install paths, permissions, and
+  writable app data); source-only setup (still too developer-oriented
+  for lab operators); a tray/window wrapper (more app surface than needed
+  for the current Flask dashboard).

@@ -9,16 +9,11 @@ changed (write "no changes this session" explicitly under that date).
 
 ## Current state
 
-- **Current phase:** Phase 6 — dashboard workflow features. Phase 5 is
-  considered complete by the human. Phase 6 Task 1 through Task 9,
-  including dashboard hot-plug detection, detected-preview, stale
-  camera-row/preview/draft-input guards, the Settings page,
-  configurable experiment save location, cloud-synced storage guidance,
-  post-experiment notes, the read-only experiment browser, and
-  maintenance mode with maintenance-only fresh-still preview are
-  implemented locally. Task 9 is complete as a docs-only recommendation
-  to keep preview as repeated fresh stills for the current Phase 6 path.
-- **Current branch:** `phase-6-dashboard-workflows`.
+- **Current phase:** Phase 7 — portable Windows packaging planning.
+  Phase 6 has been merged to `main` by the human. Phase 7 currently has
+  a docs-only packaging spec for the first user-friendly portable
+  Windows folder; no packaging implementation has started.
+- **Current branch:** `phase-7-portable-windows-packaging`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
   camera at index 2; it is excluded from the current lab camera mapping.
@@ -26,9 +21,9 @@ changed (write "no changes this session" explicitly under that date).
   approved Terminal can run the real-camera driver successfully. Manual
   Terminal-hosted post-fix stale-row/hot-plug preview and draft-input
   validation is pending.
-- **Next actions:** Human review of the completed Phase 6 Task 9
-  recommendation. Optional future work should be a separate
-  repeated-still UX spec, not production live-preview implementation.
+- **Next actions:** Implement Phase 7 portable packaging from
+  `specs/phase-7-portable-windows-packaging.md` only after the human
+  asks for implementation.
 
 ---
 
@@ -1293,3 +1288,28 @@ changed (write "no changes this session" explicitly under that date).
 - No production preview code, streaming route, camera manager, or
   frontend live-preview UI was added.
 - No push was performed.
+
+### 2026-05-31 — Phase 7 portable packaging spec drafted
+
+- Added `specs/phase-7-portable-windows-packaging.md` as a docs-only
+  plan for the first user-friendly package.
+- The planned package target is a portable Windows folder for lab
+  operators, with `LabImaging.exe`, `Start Lab Imaging.bat`, visible
+  runtime folders, and automatic browser launch.
+- Logged decision #30 in `DECISIONS.md`: first user-friendly package is
+  a portable Windows folder, not an installer.
+- No packaging code, build script, PyInstaller spec, launcher, or
+  runtime-path implementation was added.
+- Validation passed: `git diff --check`.
+- No push was performed.
+
+### 2026-05-31 — README installation-guide check
+
+- Reviewed `README.md` and `CONTRIBUTING.md` for current pre-packaging
+  install/run guidance.
+- Added a `README.md` Pre-Packaging Installation section with Windows
+  source setup steps for Python 3.11, `.venv`, dependency installation,
+  and dashboard startup.
+- Direct push to `main` was requested but not performed because
+  `AGENTS.md` forbids direct pushes to `main`; this change remains on
+  `phase-7-portable-windows-packaging`.
