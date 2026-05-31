@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
@@ -8,7 +8,7 @@ from typing import Literal
 from labcam.engine.storage import ExperimentPaths
 
 
-ExperimentStatus = Literal["idle", "capturing", "finished", "stopped", "failed"]
+ExperimentStatus = Literal["idle", "capturing", "maintenance", "finished", "stopped", "failed"]
 EndReason = Literal[
     "completed",
     "stopped_early",
@@ -50,6 +50,10 @@ class ExperimentNotFoundError(EngineError):
     """Raised when an API caller references an unknown experiment."""
 
 
+class ExperimentStateError(EngineError):
+    """Raised when an experiment lifecycle transition is not allowed."""
+
+
 @dataclass(frozen=True)
 class ExperimentConfig:
     name: str
@@ -87,6 +91,10 @@ class Experiment:
     last_error_message: str | None = None
     last_error_at: datetime | None = None
     terminal_health_message: str | None = None
+    maintenance_started_at: datetime | None = None
+    maintenance_note: str = ""
+    maintenance_skipped_capture_count: int = 0
+    maintenance_events: list[dict[str, object]] = field(default_factory=list)
 
     @property
     def experiment_id(self) -> str:
@@ -107,6 +115,72 @@ class Experiment:
             and now >= self.next_capture_at
             and self.next_capture_at <= self.planned_stop_at
         )
+
+    def enter_maintenance(self, *, started_at: datetime, note: str = "") -> dict[str, object]:
+        if self.status != "capturing":
+            raise ExperimentStateError("Only running experiments can enter maintenance.")
+        self.status = "maintenance"
+        self.maintenance_started_at = started_at
+        self.maintenance_note = note.strip()
+        self.maintenance_skipped_capture_count = 0
+        event: dict[str, object] = {
+            "started_at": started_at.astimezone().isoformat(timespec="seconds"),
+            "ended_at": None,
+            "note": self.maintenance_note,
+            "skipped_capture_count": 0,
+        }
+        self.maintenance_events.append(event)
+        return event
+
+    def record_maintenance_skips_until(self, until: datetime) -> int:
+        if self.status != "maintenance" or self.next_capture_at is None:
+            return 0
+
+        skipped = 0
+        limit = min(until, self.planned_stop_at)
+        while self.next_capture_at <= limit:
+            self.maintenance_skipped_capture_count += 1
+            skipped += 1
+            self.next_capture_at = self.next_capture_at + self.interval
+
+        if skipped and self.maintenance_events:
+            self.maintenance_events[-1]["skipped_capture_count"] = (
+                self.maintenance_skipped_capture_count
+            )
+        return skipped
+
+    def resume_from_maintenance(self, *, resumed_at: datetime) -> dict[str, object]:
+        if self.status != "maintenance":
+            raise ExperimentStateError("Only experiments in maintenance can resume.")
+        self.record_maintenance_skips_until(resumed_at)
+        self.status = "capturing"
+        self.maintenance_started_at = None
+        self.maintenance_note = ""
+        if self.maintenance_events:
+            self.maintenance_events[-1]["ended_at"] = (
+                resumed_at.astimezone().isoformat(timespec="seconds")
+            )
+            self.maintenance_events[-1]["skipped_capture_count"] = (
+                self.maintenance_skipped_capture_count
+            )
+            return self.maintenance_events[-1]
+        return {}
+
+    def close_maintenance(self, *, ended_at: datetime) -> dict[str, object] | None:
+        if self.status != "maintenance":
+            return None
+        self.record_maintenance_skips_until(ended_at)
+        self.maintenance_started_at = None
+        self.maintenance_note = ""
+        if self.maintenance_events:
+            self.maintenance_events[-1]["ended_at"] = (
+                ended_at.astimezone().isoformat(timespec="seconds")
+            )
+            self.maintenance_events[-1]["skipped_capture_count"] = (
+                self.maintenance_skipped_capture_count
+            )
+            return self.maintenance_events[-1]
+        return None
 
     def advance_after_attempt(self) -> None:
         if self.next_capture_at is None:
@@ -149,10 +223,19 @@ class Experiment:
             raise EngineError(f"Experiment is missing next_capture_at: {self.experiment_id}")
         return {
             "experiment_id": self.experiment_id,
+            "experiment_folder": str(self.paths.root),
             "camera_label": self.config.camera_label,
             "next_capture_at": self.next_capture_at.astimezone().isoformat(timespec="seconds"),
             "planned_stop_at": self.planned_stop_at.astimezone().isoformat(timespec="seconds"),
             "images_captured": self.images_captured,
+            "status": self.status,
+            "maintenance_started_at": (
+                self.maintenance_started_at.astimezone().isoformat(timespec="seconds")
+                if self.maintenance_started_at
+                else None
+            ),
+            "maintenance_note": self.maintenance_note,
+            "maintenance_skipped_capture_count": self.maintenance_skipped_capture_count,
         }
 
     def to_status(self) -> dict[str, object]:
@@ -181,6 +264,14 @@ class Experiment:
                 if self.last_error_at
                 else None
             ),
+            "maintenance_started_at": (
+                self.maintenance_started_at.astimezone().isoformat(timespec="seconds")
+                if self.maintenance_started_at
+                else None
+            ),
+            "maintenance_note": self.maintenance_note,
+            "maintenance_skipped_capture_count": self.maintenance_skipped_capture_count,
+            "maintenance_events": self.maintenance_events,
             "latest_frame_path": str(latest) if latest else None,
             "folder": str(self.paths.root),
         }

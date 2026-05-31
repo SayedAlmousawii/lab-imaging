@@ -89,3 +89,7 @@ def macos_backend() -> int:
 
 def windows_backend() -> int:
     return cv2.CAP_DSHOW
+
+
+def opencv_version() -> str:
+    return str(cv2.__version__)

@@ -59,7 +59,13 @@ class RunningStateManager:
             if not isinstance(experiment_id, str) or not experiment_id:
                 continue
 
-            folder = experiments_dir / experiment_id
+            folder_value = item.get("experiment_folder")
+            if isinstance(folder_value, str) and folder_value.strip():
+                folder = Path(folder_value).expanduser()
+                if not folder.is_absolute():
+                    folder = experiments_dir / folder
+            else:
+                folder = experiments_dir / experiment_id
             metadata_path = folder / "metadata.json"
             log_path = folder / "capture_log.txt"
             if not metadata_path.exists():

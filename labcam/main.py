@@ -19,19 +19,20 @@ def main() -> int:
     settings = _load_or_create_settings()
     if not DEFAULT_CAMERAS_PATH.exists():
         print(
-            f"Missing {DEFAULT_CAMERAS_PATH}. Run `python tools/camera_setup.py setup` first.",
+            f"Missing {DEFAULT_CAMERAS_PATH}. Open the dashboard Cameras page or run "
+            "`python tools/camera_setup.py setup`.",
             file=sys.stderr,
         )
-        return 1
 
     engine = CaptureEngine(settings_path=DEFAULT_SETTINGS_PATH, cameras_path=DEFAULT_CAMERAS_PATH)
-    for camera in engine.list_cameras():
-        unavailable_message = engine.camera_unavailable_message(camera)
-        if unavailable_message:
-            print(
-                f"WARNING: {camera.label} is unavailable. {unavailable_message}",
-                file=sys.stderr,
-            )
+    if DEFAULT_CAMERAS_PATH.exists():
+        for camera in engine.list_cameras():
+            unavailable_message = engine.camera_unavailable_message(camera)
+            if unavailable_message:
+                print(
+                    f"WARNING: {camera.label} is unavailable. {unavailable_message}",
+                    file=sys.stderr,
+                )
     engine.start()
     app = create_app(engine)
 

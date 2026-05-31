@@ -353,3 +353,137 @@ them here so a future session can revisit if any feel wrong.
   polish (it changes camera lifetime semantics); implementing it before
   a new spec (would silently violate `AGENTS.md` and the Phase 3/5
   preview constraints).
+
+## 2026-05-31 — Phase 6 task spec structure
+
+### 21. Phase 6 work is split into nine task specs
+
+- **Decided:** Phase 6 is organized as nine implementation-spec files:
+  startup camera verification, dashboard camera configuration, settings,
+  save location, cloud-sync guidance, post-experiment notes, experiment
+  browser, maintenance mode, and preview investigation. The first
+  implementation unit is startup camera verification.
+- **Why:** The Phase 6 roadmap contains multiple independent workflow
+  features. Splitting them keeps implementation narrow and prevents a
+  future session from building settings, camera setup, browser, notes,
+  maintenance, and preview behavior in one broad pass.
+- **Considered and rejected:** Keeping Phase 6 as only a holding spec
+  (too ambiguous for implementation); combining related tasks into one
+  large spec (too easy to blur scope and ship future features early).
+
+### 22. Post-experiment notes use `post_notes.txt`
+
+- **Decided:** The first post-experiment notes implementation will store
+  editable researcher notes in `post_notes.txt` inside the experiment
+  folder, while preserving the original start-time `notes` field in
+  `metadata.json`.
+- **Why:** A text file stays human-readable, travels with the experiment
+  folder, and avoids rewriting historical metadata for ordinary note
+  edits.
+- **Considered and rejected:** Reusing `metadata.json` for all post-run
+  edits (mixes original run metadata with later observations); an
+  append-only note log (better audit trail, but heavier than needed for
+  the initial dashboard note editor).
+
+### 23. Startup confirmation is session-scoped, with metadata as evidence
+
+- **Decided:** Phase 6 Task 1 confirmation resets for every app process.
+  `config/cameras.json` records `last_confirmed_at` and
+  `last_confirmed_index`, but those fields do not auto-unlock the next
+  startup session.
+- **Why:** The task requires operators to verify the current startup
+  session while still preserving useful evidence of the last confirmed
+  camera mapping.
+- **Considered and rejected:** Treating persisted confirmation metadata
+  as an automatic future unlock (too easy to miss a replug/index change);
+  storing confirmation only in memory (loses useful audit context).
+
+### 24. Settings saves are blocked during active experiments
+
+- **Decided:** Phase 6 Task 3 rejects dashboard settings saves while any
+  experiment is starting or running. Operators can still view settings
+  and diagnostics, but must stop active runs before changing capture
+  defaults.
+- **Why:** `capture_retries`, `jpeg_quality`, and `warmup_frames` feed
+  the live capture path. Blocking saves keeps Task 3 narrow and
+  guarantees active experiments are not accidentally changed mid-run.
+- **Considered and rejected:** Allowing all settings saves immediately
+  (could change active capture behavior); adding per-experiment settings
+  snapshots in this task (larger engine/storage change better reserved
+  for a dedicated need); allowing only form-default changes during active
+  runs (more complicated UI rules for little v1 benefit).
+
+### 25. Save-location changes are allowed during active experiments
+
+- **Decided:** Phase 6 Task 4 allows dashboard saves that change only
+  `experiments_dir` while experiments are running. Capture defaults
+  remain locked until active runs stop.
+- **Why:** A changed save location only affects future experiment
+  folders. Active experiments already hold their concrete output paths,
+  so continuing to block capture defaults is enough to avoid changing
+  live capture behavior.
+- **Considered and rejected:** Blocking all settings saves during active
+  runs (stricter than the Task 4 requirement); applying the new folder to
+  active experiments (would move or split a running dataset).
+
+### 26. Runtime state records active experiment folders
+
+- **Decided:** New `running_state.json` entries include
+  `experiment_folder` in addition to the existing experiment id and
+  timing fields. Startup recovery prefers that stored folder and falls
+  back to `experiments_dir / experiment_id` for older state files.
+- **Why:** The configured save location can now change while an
+  experiment is active. Recovery needs the actual folder chosen at
+  experiment start, not whichever folder is configured on the next app
+  startup.
+- **Considered and rejected:** Looking only under the current
+  `experiments_dir` during recovery (can miss active runs created in a
+  previous location); rewriting old state entries ahead of time
+  (unnecessary because the fallback preserves compatibility).
+
+### 27. Blank post-experiment notes remove the sidecar file
+
+- **Decided:** Saving an empty or whitespace-only post-experiment note
+  deletes `post_notes.txt` instead of keeping an empty sidecar file.
+- **Why:** Missing file and no-note state become the same simple
+  filesystem signal, and note presence stays easy to display in the
+  dashboard and future experiment browser.
+- **Considered and rejected:** Keeping an empty `post_notes.txt` after
+  blank saves (harder to distinguish meaningful notes from cleared
+  notes); rewriting `metadata.json` to track note state (unnecessary
+  metadata churn).
+
+### 28. Maintenance skips are logged as windows, not sequence gaps
+
+- **Decided:** Phase 6 maintenance mode does not create image sequence
+  gaps for intentionally skipped scheduled captures. Each maintenance
+  window records `started_at`, `ended_at`, operator note, and
+  `skipped_capture_count` in `metadata.json`, with matching audit lines
+  in `capture_log.txt`.
+- **Why:** Maintenance is an intentional operator pause, not a capture
+  failure. Keeping image sequence numbers contiguous preserves the
+  meaning that missing sequence numbers represent failed capture
+  attempts, while the maintenance event records why no images exist for
+  the pause window.
+- **Considered and rejected:** Advancing image sequence numbers for
+  every skipped scheduled time (would make planned maintenance look like
+  capture failures); logging only start/end without skipped counts (less
+  auditable for long adjustment windows).
+
+### 29. Preview remains repeated fresh stills for Phase 6
+
+- **Decided:** Phase 6 closes the live-preview investigation by keeping
+  production preview as repeated fresh still captures. Continuous live
+  preview, streaming endpoints, and long-lived camera managers are not
+  part of the current Phase 6 completion path.
+- **Why:** Fresh still preview preserves the existing open-grab-close
+  camera lifetime, process-wide capture safety model, and scheduled
+  still-capture invariants. Continuous live preview would change camera
+  ownership semantics and needs a separate implementation spec plus
+  Windows hardware validation before it is safe to build.
+- **Considered and rejected:** Adding live preview as a small dashboard
+  enhancement (it changes capture ownership and conflict behavior);
+  adding a streaming endpoint without a camera-manager spec (too much
+  unvalidated production surface); auto-refreshing previews without
+  bounded cadence and busy-state rules (could compete with scheduled
+  capture in unclear ways).

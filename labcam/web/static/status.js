@@ -12,6 +12,8 @@ const LIVE_LABEL_REFRESH_MS = 1000;
 
 let lastRefreshAt = null;
 let lastStations = [];
+const maintenancePreviewUrls = new Map();
+const maintenancePreviewErrors = new Map();
 
 const ICONS = {
   refresh: '<svg class="ic ic-16" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 9 16 9"/></svg>',
@@ -22,6 +24,8 @@ const ICONS = {
   info: '<svg class="ic ic-16 ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><circle cx="12" cy="8" r="0.7" fill="currentColor" stroke="none"/></svg>',
   imageOff: '<svg class="ic ic-22 ico" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="3" y1="5" x2="21" y2="19"/></svg>',
   plug: '<svg class="ic ic-16 ico" viewBox="0 0 24 24"><path d="M9 2v6"/><path d="M15 2v6"/><path d="M6 8h12v4a6 6 0 0 1-12 0V8Z"/><path d="M12 18v4"/></svg>',
+  note: '<svg class="ic ic-16" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>',
+  wrench: '<svg class="ic ic-16" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5 5L4 17v3h3l5.7-5.7a4 4 0 0 0 5-5l-2.8 2.8-3-3 2.8-2.8Z"/></svg>',
 };
 
 function escapeHtml(value) {
@@ -87,6 +91,7 @@ function formatIntervalMinutes(value) {
 
 function clientState(station) {
   if (station.health_state === "camera_unavailable") return "offline";
+  if (station.state === "maintenance") return "maintenance";
   if (station.health_state === "capture_failing") return "error";
   if (station.state === "running") return "running";
   if (station.state === "finished" || station.state === "completed") return "done";
@@ -98,6 +103,7 @@ function clientState(station) {
 function stateLabel(state) {
   return ({
     running: "Running",
+    maintenance: "Maintenance",
     idle: "Idle",
     done: "Finished",
     error: "Attention",
@@ -107,12 +113,19 @@ function stateLabel(state) {
 
 function pillToneFor(state) {
   if (state === "running") return "is-running";
+  if (state === "maintenance") return "is-warn";
   if (state === "done") return "is-done";
   if (state === "error") return "is-danger";
   return "is-idle";
 }
 
 function frameBlock(station, state) {
+  const previewUrl = maintenancePreviewUrls.get(station.experiment_id);
+  if (state === "maintenance" && previewUrl) {
+    return `
+      <img class="frame-img" src="${escapeHtml(previewUrl)}" alt="Maintenance preview for ${escapeHtml(station.camera_label)}">
+    `;
+  }
   if (station.latest_url) {
     const url = `${station.latest_url}?t=${Date.now()}`;
     const refreshAttr = state === "running"
@@ -197,9 +210,52 @@ function runningBody(station) {
     <div class="station-foot">
       ${nextIn ? `<span>Next capture in <span class="mono" data-next-capture-at="${escapeHtml(station.next_capture_at)}">${escapeHtml(nextIn)}</span></span>` : ""}
       <span class="spacer"></span>
+      <button type="button" class="btn btn-sm" data-maintenance-id="${escapeHtml(station.experiment_id)}">${ICONS.wrench} Maintenance</button>
       <button type="button" class="btn is-danger btn-sm" data-stop-id="${escapeHtml(station.experiment_id)}">${ICONS.square} Stop</button>
     </div>
     ${healthNote(station)}
+    ${identityNote(station)}
+  `;
+}
+
+function maintenanceBody(station) {
+  const note = station.maintenance_note
+    ? `<span class="meta">${escapeHtml(station.maintenance_note)}</span>`
+    : `<span class="meta">No note entered.</span>`;
+  const skipped = Number(station.maintenance_skipped_capture_count) || 0;
+  const previewError = maintenancePreviewErrors.get(station.experiment_id);
+  const previewErrorNote = previewError
+    ? `
+      <div class="note is-danger">
+        ${ICONS.alert}
+        <div class="body">
+          <strong>Preview failed.</strong>
+          <span class="meta">${escapeHtml(previewError)}</span>
+        </div>
+      </div>
+    `
+    : "";
+  return `
+    <div class="exp-line">
+      <span class="exp-name">${escapeHtml(station.experiment_name || "")}</span>
+    </div>
+    ${metricRow(station)}
+    <div class="note is-warn">
+      ${ICONS.wrench}
+      <div class="body">
+        <strong>Maintenance window active.</strong>
+        ${note}
+        <span class="meta">Skipped scheduled captures: ${escapeHtml(skipped)}</span>
+      </div>
+    </div>
+    ${previewErrorNote}
+    <div class="station-foot">
+      <span>${station.next_capture_at ? `Next cadence slot: <span class="mono">${escapeHtml(formatClock(station.next_capture_at))}</span>` : ""}</span>
+      <span class="spacer"></span>
+      <button type="button" class="btn btn-sm" data-maintenance-preview-id="${escapeHtml(station.experiment_id)}" data-maintenance-preview-camera="${escapeHtml(station.camera_label)}">${ICONS.eye} Capture preview</button>
+      <button type="button" class="btn is-accent btn-sm" data-resume-maintenance-id="${escapeHtml(station.experiment_id)}">${ICONS.play} Resume</button>
+      <button type="button" class="btn is-danger btn-sm" data-stop-id="${escapeHtml(station.experiment_id)}">${ICONS.square} Stop</button>
+    </div>
     ${identityNote(station)}
   `;
 }
@@ -223,6 +279,9 @@ function doneBody(station) {
   const folder = station.folder
     ? `<span>Output: <span class="mono">${escapeHtml(station.folder)}</span></span>`
     : "";
+  const notesLink = station.post_notes_url
+    ? `<a class="btn btn-sm" href="${escapeHtml(station.post_notes_url)}">${ICONS.note} ${station.has_post_notes ? "Edit notes" : "Add notes"}</a>`
+    : "";
   return `
     <div class="exp-line">
       <span class="exp-name">${escapeHtml(station.experiment_name || "")}</span>
@@ -237,6 +296,7 @@ function doneBody(station) {
     <div class="station-foot">
       ${folder}
       <span class="spacer"></span>
+      ${notesLink}
       <a class="btn btn-sm" href="/new">Start another</a>
     </div>
     ${identityNote(station)}
@@ -244,6 +304,9 @@ function doneBody(station) {
 }
 
 function errorBody(station) {
+  const notesLink = station.post_notes_url
+    ? `<a class="btn btn-sm" href="${escapeHtml(station.post_notes_url)}">${ICONS.note} ${station.has_post_notes ? "Edit notes" : "Add notes"}</a>`
+    : "";
   return `
     <div class="note is-danger">
       ${ICONS.alert}
@@ -254,6 +317,7 @@ function errorBody(station) {
     </div>
     <div class="station-foot">
       <span class="spacer"></span>
+      ${notesLink}
       ${station.experiment_id ? `<button type="button" class="btn is-danger btn-sm" data-stop-id="${escapeHtml(station.experiment_id)}">${ICONS.square} Stop run</button>` : ""}
     </div>
     ${identityNote(station)}
@@ -279,6 +343,7 @@ function stationCard(station) {
   const label = stateLabel(state);
   let body;
   if (state === "running") body = runningBody(station);
+  else if (state === "maintenance") body = maintenanceBody(station);
   else if (state === "done") body = doneBody(station);
   else if (state === "error") body = errorBody(station);
   else if (state === "offline") body = offlineBody(station);
@@ -306,6 +371,7 @@ function stationCard(station) {
 }
 
 function renderStations(stations) {
+  pruneMaintenancePreviewState(stations);
   if (!stations.length) {
     grid.innerHTML = `<div class="note"><div class="body">No cameras are configured.</div></div>`;
     return;
@@ -313,17 +379,37 @@ function renderStations(stations) {
   grid.innerHTML = stations.map(stationCard).join("");
 }
 
+function pruneMaintenancePreviewState(stations) {
+  const activeMaintenanceIds = new Set(
+    stations
+      .filter((station) => clientState(station) === "maintenance" && station.experiment_id)
+      .map((station) => station.experiment_id)
+  );
+  for (const [experimentId, url] of maintenancePreviewUrls) {
+    if (!activeMaintenanceIds.has(experimentId)) {
+      URL.revokeObjectURL(url);
+      maintenancePreviewUrls.delete(experimentId);
+    }
+  }
+  for (const experimentId of maintenancePreviewErrors.keys()) {
+    if (!activeMaintenanceIds.has(experimentId)) {
+      maintenancePreviewErrors.delete(experimentId);
+    }
+  }
+}
+
 function renderSummary(stations) {
   const states = stations.map(clientState);
   const total = stations.length;
   const running = states.filter((s) => s === "running").length;
+  const maintenance = states.filter((s) => s === "maintenance").length;
   const idle = states.filter((s) => s === "idle").length;
   const done = states.filter((s) => s === "done").length;
   const errored = states.filter((s) => s === "error" || s === "offline").length;
   const frames = stations.reduce((acc, s) => acc + (Number(s.images_captured) || 0), 0);
 
   const nextCaptures = stations
-    .filter((s) => clientState(s) === "running" && s.next_capture_at)
+    .filter((s) => ["running", "maintenance"].includes(clientState(s)) && s.next_capture_at)
     .map((s) => ({ at: new Date(s.next_capture_at).getTime(), label: s.camera_label }))
     .filter((row) => Number.isFinite(row.at) && row.at > Date.now())
     .sort((a, b) => a.at - b.at);
@@ -361,6 +447,7 @@ function renderSummary(stations) {
 
   const parts = [`${total} station${total === 1 ? "" : "s"}`];
   if (running) parts.push(`<span class="num">${running}</span> running`);
+  if (maintenance) parts.push(`<span class="num">${maintenance}</span> maintenance`);
   if (idle) parts.push(`<span class="num">${idle}</span> idle`);
   if (done) parts.push(`<span class="num">${done}</span> finished`);
   if (errored) parts.push(`<span class="num">${errored}</span> attention`);
@@ -475,12 +562,104 @@ async function stopExperiment(experimentId, button) {
   }
 }
 
-grid.addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-stop-id]");
-  if (!button) {
+async function startMaintenance(experimentId, button) {
+  const note = window.prompt("Maintenance note (optional)", "");
+  if (note === null) {
     return;
   }
-  stopExperiment(button.dataset.stopId, button);
+  button.disabled = true;
+  button.classList.add("is-loading");
+  try {
+    const response = await fetch(`/api/experiments/${encodeURIComponent(experimentId)}/maintenance/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error?.message || "Could not enter maintenance");
+    }
+    await refreshStatus();
+  } catch (error) {
+    button.disabled = false;
+    button.classList.remove("is-loading");
+    alert(error.message);
+  }
+}
+
+async function resumeMaintenance(experimentId, button) {
+  button.disabled = true;
+  button.classList.add("is-loading");
+  try {
+    const response = await fetch(`/api/experiments/${encodeURIComponent(experimentId)}/maintenance/resume`, {
+      method: "POST",
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error?.message || "Could not resume experiment");
+    }
+    await refreshStatus();
+  } catch (error) {
+    button.disabled = false;
+    button.classList.remove("is-loading");
+    alert(error.message);
+  }
+}
+
+async function captureMaintenancePreview(experimentId, cameraLabel, button) {
+  button.disabled = true;
+  button.classList.add("is-loading");
+  maintenancePreviewErrors.delete(experimentId);
+  try {
+    const response = await fetch("/api/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ camera_label: cameraLabel }),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error?.message || "Could not capture preview");
+    }
+    const blob = await response.blob();
+    const previousUrl = maintenancePreviewUrls.get(experimentId);
+    if (previousUrl) {
+      URL.revokeObjectURL(previousUrl);
+    }
+    maintenancePreviewUrls.set(experimentId, URL.createObjectURL(blob));
+    renderStations(lastStations);
+  } catch (error) {
+    maintenancePreviewErrors.set(experimentId, error.message);
+    renderStations(lastStations);
+  } finally {
+    button.disabled = false;
+    button.classList.remove("is-loading");
+  }
+}
+
+grid.addEventListener("click", (event) => {
+  const stopButton = event.target.closest("button[data-stop-id]");
+  if (stopButton) {
+    stopExperiment(stopButton.dataset.stopId, stopButton);
+    return;
+  }
+  const maintenanceButton = event.target.closest("button[data-maintenance-id]");
+  if (maintenanceButton) {
+    startMaintenance(maintenanceButton.dataset.maintenanceId, maintenanceButton);
+    return;
+  }
+  const resumeButton = event.target.closest("button[data-resume-maintenance-id]");
+  if (resumeButton) {
+    resumeMaintenance(resumeButton.dataset.resumeMaintenanceId, resumeButton);
+    return;
+  }
+  const previewButton = event.target.closest("button[data-maintenance-preview-id]");
+  if (previewButton) {
+    captureMaintenancePreview(
+      previewButton.dataset.maintenancePreviewId,
+      previewButton.dataset.maintenancePreviewCamera,
+      previewButton
+    );
+  }
 });
 
 refreshBtn.addEventListener("click", () => {

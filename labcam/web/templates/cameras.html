@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Cameras - Lab Imaging{% endblock %}
+
+{% block content %}
+  <header class="page-head">
+    <div class="titles">
+      <div class="eyebrow">Configuration</div>
+      <h1>Cameras</h1>
+      <div class="sub" id="cameras-sub">Detect cameras, assign station labels, and run setup checks.</div>
+    </div>
+    <div class="actions">
+      <button class="btn" type="button" id="detect-button">
+        <svg class="ic ic-16" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 9 16 9"/></svg>
+        Detect
+      </button>
+      <button class="btn is-accent" type="button" id="save-button">
+        <svg class="ic ic-16" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Save mapping
+      </button>
+    </div>
+  </header>
+
+  <div id="camera-alerts"></div>
+
+  <section class="camera-config-grid">
+    <div>
+      <div class="section-title">
+        <h2>Detected cameras</h2>
+        <span id="detected-count">—</span>
+      </div>
+      <div class="setup-grid" id="detected-grid" aria-live="polite">
+        <div class="note"><div class="body">Loading cameras…</div></div>
+      </div>
+    </div>
+
+    <aside class="card setup-panel">
+      <header class="card-head">
+        <h2>Stress test</h2>
+        <span class="sub">Sequential still captures</span>
+      </header>
+      <div class="card-body">
+        <div class="field">
+          <label class="lbl" for="stress-cycles">Cycles per camera</label>
+          <input id="stress-cycles" class="input is-mono" type="number" min="1" step="1" value="100">
+        </div>
+        <button class="btn is-primary" type="button" id="stress-button">
+          <svg class="ic ic-16" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Run stress test
+        </button>
+        <div id="stress-results" class="stress-results"></div>
+      </div>
+    </aside>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='cameras.js') }}"></script>
+{% endblock %}

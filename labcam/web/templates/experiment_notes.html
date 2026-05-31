@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Post-Run Notes - Lab Imaging{% endblock %}
+
+{% block content %}
+  <header class="page-head">
+    <div class="titles">
+      <div class="eyebrow">Experiment</div>
+      <h1 id="notes-title">Post-run notes</h1>
+      <div class="sub" id="notes-sub">Loading experiment…</div>
+    </div>
+    <div class="actions">
+      <a class="btn" href="/">
+        <svg class="ic ic-16" viewBox="0 0 24 24"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>
+        Station status
+      </a>
+      <button class="btn is-accent" type="submit" form="post-notes-form" id="notes-save" disabled>
+        <svg class="ic ic-16" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Save notes
+      </button>
+    </div>
+  </header>
+
+  <div id="notes-alerts"></div>
+
+  <section class="settings-grid" id="post-notes-root" data-experiment-id="{{ experiment_id }}">
+    <form id="post-notes-form" class="card">
+      <header class="card-head">
+        <h2>Notes</h2>
+        <span class="sub" id="notes-state">—</span>
+      </header>
+      <div class="card-body">
+        <div class="field">
+          <label class="lbl" for="post-notes">Post-run notes</label>
+          <textarea id="post-notes" class="textarea post-notes-textarea" name="notes" disabled></textarea>
+          <span class="hint">Saved as post_notes.txt in the experiment folder.</span>
+        </div>
+      </div>
+    </form>
+
+    <aside class="card">
+      <header class="card-head">
+        <h2>Run details</h2>
+        <span class="sub">Read-only</span>
+      </header>
+      <div class="card-body">
+        <dl class="diagnostic-list" id="notes-details">
+          <div><dt>Experiment</dt><dd>—</dd></div>
+          <div><dt>Camera</dt><dd>—</dd></div>
+          <div><dt>Ended</dt><dd>—</dd></div>
+          <div><dt>Reason</dt><dd>—</dd></div>
+          <div><dt>Folder</dt><dd class="mono">—</dd></div>
+          <div><dt>Notes file</dt><dd class="mono">—</dd></div>
+        </dl>
+        <div class="field">
+          <span class="lbl">Original start notes</span>
+          <div class="note" id="metadata-notes"><div class="body">—</div></div>
+        </div>
+      </div>
+    </aside>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='experiment_notes.js') }}"></script>
+{% endblock %}

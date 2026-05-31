@@ -3,6 +3,7 @@ from __future__ import annotations
 import errno
 import json
 import math
+import re
 import shutil
 import threading
 import tempfile
@@ -15,6 +16,8 @@ from labcam.cameras.interface import (
     CameraInfo,
     capture_frame,
     check_camera_available,
+    list_cameras_fresh_process as detect_camera_infos,
+    preview_camera_fresh_process,
     preview_frame,
     save_jpeg,
 )
@@ -27,20 +30,25 @@ from labcam.engine.experiment import (
     Experiment,
     ExperimentConfig,
     ExperimentNotFoundError,
+    ExperimentStateError,
 )
 from labcam.engine.state import DEFAULT_STATE_PATH, RunningStateManager
 from labcam.engine.storage import (
     DEFAULT_EXPERIMENTS_DIR,
     DEFAULT_JPEG_QUALITY,
     append_log_line,
+    atomic_write_json,
     build_metadata,
     create_experiment_paths,
+    iso_timestamp,
     local_now,
     save_frame_as_jpeg,
+    update_metadata_maintenance_events,
     update_metadata_finalize,
     write_metadata,
     StorageError,
 )
+from labcam.engine.settings import load_effective_settings, resolve_experiments_dir
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -49,6 +57,7 @@ DEFAULT_CAMERAS_PATH = PROJECT_ROOT / "config" / "cameras.json"
 DEFAULT_CAPTURE_RETRIES = 2
 CONSERVATIVE_BYTES_PER_IMAGE = 8_000_000
 LOW_FREE_BYTES = 1_000_000
+CAMERA_LABEL_PATTERN = re.compile(r"^[A-Za-z0-9-]+$")
 
 
 class _TerminalStorageFailure(RuntimeError):
@@ -66,6 +75,9 @@ class CameraRecord:
     stable_id: str
     last_seen_index: int
     warnings: list[str]
+    notes: str = ""
+    last_confirmed_at: str | None = None
+    last_confirmed_index: int | None = None
 
     def to_camera_info(self) -> CameraInfo:
         return CameraInfo(
@@ -104,6 +116,8 @@ class CaptureEngine:
         capture_func: Callable[[CameraInfo], Any] = capture_frame,
         preview_func: Callable[[CameraInfo], Any] = preview_frame,
         camera_check_func: Callable[[CameraInfo], None] = check_camera_available,
+        detected_camera_func: Callable[[], list[CameraInfo]] = detect_camera_infos,
+        detected_preview_func: Callable[..., Path] = preview_camera_fresh_process,
         save_jpeg_func: Callable[..., Path] = save_jpeg,
         disk_usage_func: Callable[[Path], shutil._ntuple_diskusage] = shutil.disk_usage,
         now_func: Callable[[], datetime] = local_now,
@@ -113,18 +127,24 @@ class CaptureEngine:
         self.settings_path = settings_path
         self.cameras_path = cameras_path
         self.settings = self._load_settings()
+        self._experiments_dir_override = experiments_dir is not None
         self.experiments_dir = (
             Path(experiments_dir)
             if experiments_dir is not None
-            else Path(self.settings.get("experiments_dir", DEFAULT_EXPERIMENTS_DIR))
+            else resolve_experiments_dir(
+                self.settings.get("experiments_dir", DEFAULT_EXPERIMENTS_DIR),
+                project_root=PROJECT_ROOT,
+            )
         )
-        if not self.experiments_dir.is_absolute():
+        if self._experiments_dir_override and not self.experiments_dir.is_absolute():
             self.experiments_dir = PROJECT_ROOT / self.experiments_dir
         self.experiments_dir = self.experiments_dir.resolve()
         self.state = RunningStateManager(state_path)
         self.capture_func = capture_func
         self.preview_func = preview_func
         self.camera_check_func = camera_check_func
+        self.detected_camera_func = detected_camera_func
+        self.detected_preview_func = detected_preview_func
         self.save_jpeg_func = save_jpeg_func
         self.disk_usage_func = disk_usage_func
         self.now_func = now_func
@@ -135,6 +155,7 @@ class CaptureEngine:
         self._finished: dict[str, Experiment] = {}
         self._starting_cameras: set[str] = set()
         self._capturing_cameras: dict[str, int] = {}
+        self._verified_camera_labels: set[str] = set()
         self._lock = threading.RLock()
         self._wake = threading.Event()
         self._shutdown = threading.Event()
@@ -152,6 +173,7 @@ class CaptureEngine:
         )
         experiment_config.validate()
         camera = self._camera_record(experiment_config.camera_label)
+        self._ensure_camera_verified(camera.label)
         self._reserve_camera(camera.label)
 
         try:
@@ -243,23 +265,183 @@ class CaptureEngine:
     def list_cameras(self) -> list[CameraRecord]:
         return self._load_cameras()
 
+    def detected_cameras(self) -> list[dict[str, Any]]:
+        self._ensure_camera_setup_idle()
+        return [self._detected_camera_payload(camera) for camera in self.detected_camera_func()]
+
+    def preview_detected_camera(self, camera_index: int, *, output_dir: Path | None = None) -> Path:
+        self._ensure_camera_setup_idle()
+        camera = self._detected_camera(camera_index)
+        self._ensure_detected_camera_not_busy(camera.index)
+        preview_dir = Path(output_dir) if output_dir is not None else Path(tempfile.gettempdir())
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        output_path = preview_dir / f"labcam-preview-detected-{camera.index}.jpg"
+        return self.detected_preview_func(camera.index, output_path, quality=self.jpeg_quality)
+
+    def save_camera_config(self, mappings: list[dict[str, Any]]) -> dict[str, Any]:
+        self._ensure_camera_setup_idle()
+        detected_by_index = {camera.index: camera for camera in self.detected_camera_func()}
+        if not mappings:
+            raise CameraConfigError("At least one camera mapping is required.")
+
+        records: list[dict[str, Any]] = []
+        labels: set[str] = set()
+        indexes: set[int] = set()
+        for position, mapping in enumerate(mappings, start=1):
+            label = str(mapping.get("label") or "").strip()
+            if not CAMERA_LABEL_PATTERN.fullmatch(label):
+                raise CameraConfigError(
+                    "Station labels may use only letters, numbers, and hyphens."
+                )
+            if label in labels:
+                raise CameraConfigError(f"Duplicate station label: {label}")
+            labels.add(label)
+
+            try:
+                camera_index = int(mapping.get("camera_index"))
+            except (TypeError, ValueError) as exc:
+                raise CameraConfigError(f"Camera index is required for mapping {position}.") from exc
+            if camera_index in indexes:
+                raise CameraConfigError(f"Camera index {camera_index} is assigned more than once.")
+            indexes.add(camera_index)
+
+            detected = detected_by_index.get(camera_index)
+            if detected is None:
+                raise CameraConfigError(f"Camera index {camera_index} is not detected.")
+
+            notes = str(mapping.get("notes") or "").strip()
+            record: dict[str, Any] = {
+                "label": label,
+                "identity_strategy": detected.identity_strategy,
+                "stable_id": detected.stable_id,
+                "last_seen_index": detected.index,
+                "warnings": detected.warnings,
+            }
+            if notes:
+                record["notes"] = notes
+            records.append(record)
+
+        atomic_write_json(self.cameras_path, {"cameras": records})
+        with self._lock:
+            self._verified_camera_labels.clear()
+        return self.verification_status()
+
+    def stress_test_cameras(self, camera_indexes: list[int], *, cycles: int = 100) -> dict[str, Any]:
+        self._ensure_camera_setup_idle()
+        if cycles < 1:
+            raise CameraConfigError("cycles must be at least 1")
+        if not camera_indexes:
+            raise CameraConfigError("At least one camera is required for stress test.")
+
+        detected_by_index = {camera.index: camera for camera in self.detected_camera_func()}
+        results: list[dict[str, Any]] = []
+        for camera_index in camera_indexes:
+            camera = detected_by_index.get(int(camera_index))
+            if camera is None:
+                raise CameraConfigError(f"Camera index {camera_index} is not detected.")
+            self._ensure_detected_camera_not_busy(camera.index)
+
+            failures: list[str] = []
+            passed = 0
+            for cycle in range(1, cycles + 1):
+                try:
+                    self.capture_func(camera)
+                except Exception as exc:
+                    failures.append(f"cycle {cycle}: {_capture_error_message(exc)}")
+                    break
+                passed += 1
+
+            results.append(
+                {
+                    **self._detected_camera_payload(camera),
+                    "cycles": cycles,
+                    "passed": passed,
+                    "ok": passed == cycles and not failures,
+                    "failures": failures,
+                }
+            )
+
+        return {"cycles": cycles, "results": results}
+
+    def verification_required(self) -> bool:
+        cameras = self._load_cameras()
+        labels = {camera.label for camera in cameras}
+        with self._lock:
+            self._verified_camera_labels.intersection_update(labels)
+            return bool(labels) and self._verified_camera_labels != labels
+
+    def verification_status(self) -> dict[str, Any]:
+        cameras = self._load_cameras()
+        labels = {camera.label for camera in cameras}
+        with self._lock:
+            self._verified_camera_labels.intersection_update(labels)
+            verified = set(self._verified_camera_labels)
+
+        return {
+            "required": bool(labels) and verified != labels,
+            "complete": bool(labels) and verified == labels,
+            "cameras": [
+                {
+                    "label": camera.label,
+                    "identity_strategy": camera.identity_strategy,
+                    "stable_id": camera.stable_id,
+                    "last_seen_index": camera.last_seen_index,
+                    "warnings": camera.warnings,
+                    "identity_warning": camera.identity_strategy != "hardware_id",
+                    "last_confirmed_at": camera.last_confirmed_at,
+                    "last_confirmed_index": camera.last_confirmed_index,
+                    "confirmed": camera.label in verified,
+                }
+                for camera in cameras
+            ],
+        }
+
+    def confirm_camera(self, camera_label: str) -> dict[str, Any]:
+        camera = self._camera_record(camera_label)
+        self._capture_preview_frame(camera)
+        confirmed_at = self.now_func()
+        confirmed_at_iso = iso_timestamp(confirmed_at)
+
+        payload = self._load_camera_config_payload()
+        records = payload.get("cameras")
+        if not isinstance(records, list):
+            raise CameraConfigError(f"Expected cameras list in {self.cameras_path}")
+
+        updated = False
+        for record in records:
+            if isinstance(record, dict) and str(record.get("label")) == camera.label:
+                record["last_confirmed_at"] = confirmed_at_iso
+                record["last_confirmed_index"] = camera.last_seen_index
+                updated = True
+                break
+        if not updated:
+            raise CameraConfigError(f"Unknown camera label {camera.label!r}")
+
+        atomic_write_json(self.cameras_path, payload)
+        with self._lock:
+            self._verified_camera_labels.add(camera.label)
+        return self.verification_status()
+
     def preview(self, camera_label: str, *, output_dir: Path | None = None) -> Path:
         camera = self._camera_record(camera_label)
+        frame = self._capture_preview_frame(camera)
+        preview_dir = Path(output_dir) if output_dir is not None else Path(tempfile.gettempdir())
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        safe_label = "".join(
+            char if char.isalnum() or char in {"-", "_"} else "-"
+            for char in camera.label
+        ).strip("-") or "camera"
+        output_path = preview_dir / f"labcam-preview-{safe_label}.jpg"
+        return self.save_jpeg_func(frame, output_path, quality=self.jpeg_quality)
+
+    def _capture_preview_frame(self, camera: CameraRecord) -> Any:
         with self._lock:
             if self._capturing_cameras.get(camera.label, 0) > 0:
                 raise ActiveExperimentError(f"Camera {camera.label} is currently capturing")
             self._capturing_cameras[camera.label] = self._capturing_cameras.get(camera.label, 0) + 1
 
         try:
-            frame = self.preview_func(camera.to_camera_info())
-            preview_dir = Path(output_dir) if output_dir is not None else Path(tempfile.gettempdir())
-            preview_dir.mkdir(parents=True, exist_ok=True)
-            safe_label = "".join(
-                char if char.isalnum() or char in {"-", "_"} else "-"
-                for char in camera.label
-            ).strip("-") or "camera"
-            output_path = preview_dir / f"labcam-preview-{safe_label}.jpg"
-            return self.save_jpeg_func(frame, output_path, quality=self.jpeg_quality)
+            return self.preview_func(camera.to_camera_info())
         finally:
             with self._lock:
                 self._unmark_capturing(camera.label)
@@ -272,10 +454,87 @@ class CaptureEngine:
             experiment.stop_requested = True
             self._wake.set()
 
+    def enter_maintenance(self, experiment_id: str, *, note: str = "") -> dict[str, object]:
+        with self._lock:
+            experiment = self._active.get(experiment_id)
+            if experiment is None:
+                raise ExperimentNotFoundError(f"Unknown running experiment: {experiment_id}")
+            started_at = self.now_func()
+            event = experiment.enter_maintenance(started_at=started_at, note=note)
+
+        try:
+            update_metadata_maintenance_events(
+                experiment.paths.metadata_path,
+                experiment.maintenance_events,
+            )
+            append_log_line(
+                experiment.paths.log_path,
+                started_at,
+                "MAINT",
+                f"start note={_log_value(experiment.maintenance_note)}",
+            )
+            self.state.replace_entry(experiment.to_running_state())
+        except Exception:
+            with self._lock:
+                if experiment.status == "maintenance":
+                    experiment.status = "capturing"
+                    experiment.maintenance_started_at = None
+                    experiment.maintenance_note = ""
+                    experiment.maintenance_skipped_capture_count = 0
+                    if experiment.maintenance_events and experiment.maintenance_events[-1] is event:
+                        experiment.maintenance_events.pop()
+            raise
+
+        self._wake.set()
+        return experiment.to_status()
+
+    def resume_maintenance(self, experiment_id: str) -> dict[str, object]:
+        with self._lock:
+            experiment = self._active.get(experiment_id)
+            if experiment is None:
+                raise ExperimentNotFoundError(f"Unknown running experiment: {experiment_id}")
+            resumed_at = self.now_func()
+            event = experiment.resume_from_maintenance(resumed_at=resumed_at)
+
+        update_metadata_maintenance_events(
+            experiment.paths.metadata_path,
+            experiment.maintenance_events,
+        )
+        append_log_line(
+            experiment.paths.log_path,
+            resumed_at,
+            "MAINT",
+            (
+                "end "
+                f"skipped_captures={event.get('skipped_capture_count', 0)} "
+                f"note={_log_value(str(event.get('note') or ''))}"
+            ),
+        )
+        self.state.replace_entry(experiment.to_running_state())
+        self._wake.set()
+        return experiment.to_status()
+
     def list_experiments(self) -> list[dict[str, object]]:
         with self._lock:
             experiments = list(self._active.values()) + list(self._finished.values())
             return [experiment.to_status() for experiment in experiments]
+
+    def has_active_experiments(self) -> bool:
+        with self._lock:
+            return bool(self._active or self._starting_cameras)
+
+    def reload_settings(self) -> dict[str, Any]:
+        settings = self._load_settings()
+        with self._lock:
+            self.settings = settings
+            self.capture_retries = int(settings.get("capture_retries", DEFAULT_CAPTURE_RETRIES))
+            self.jpeg_quality = int(settings.get("jpeg_quality", DEFAULT_JPEG_QUALITY))
+            if not self._experiments_dir_override:
+                self.experiments_dir = resolve_experiments_dir(
+                    settings.get("experiments_dir", DEFAULT_EXPERIMENTS_DIR),
+                    project_root=PROJECT_ROOT,
+                )
+        return settings
 
     def latest_frame_path(self, experiment_id: str) -> Path | None:
         with self._lock:
@@ -318,6 +577,26 @@ class CaptureEngine:
                 for experiment in self._active.values():
                     if experiment.stop_requested:
                         finalize_stopped.append(experiment)
+                        continue
+                    if experiment.status == "maintenance":
+                        skipped = experiment.record_maintenance_skips_until(now)
+                        if skipped:
+                            try:
+                                self.state.replace_entry(experiment.to_running_state())
+                            except Exception as exc:
+                                failure = self._storage_failure(exc, experiment.paths.root)
+                                if failure is None:
+                                    raise
+                                finalize_stopped.append(experiment)
+                                experiment.mark_terminal_health(
+                                    message=failure.message,
+                                    failed_at=now,
+                                )
+                                continue
+                        if now >= experiment.planned_stop_at:
+                            finalize_completed.append(experiment)
+                        else:
+                            sleep_seconds = min(sleep_seconds, self.poll_floor_seconds)
                         continue
                     if experiment.tick(now):
                         due.append(experiment)
@@ -480,6 +759,30 @@ class CaptureEngine:
                 return
 
         ended_at = self.now_func()
+        maintenance_event = None
+        if experiment.status == "maintenance":
+            maintenance_event = experiment.close_maintenance(ended_at=ended_at)
+            if maintenance_event:
+                try:
+                    update_metadata_maintenance_events(
+                        experiment.paths.metadata_path,
+                        experiment.maintenance_events,
+                    )
+                    append_log_line(
+                        experiment.paths.log_path,
+                        ended_at,
+                        "MAINT",
+                        (
+                            f"end reason={reason} "
+                            f"skipped_captures={maintenance_event.get('skipped_capture_count', 0)} "
+                            f"note={_log_value(str(maintenance_event.get('note') or ''))}"
+                        ),
+                    )
+                except Exception as exc:
+                    self._record_finalization_error(
+                        experiment,
+                        f"maintenance update failed: {_storage_error_message(exc)}",
+                    )
         experiment.finalize(reason, ended_at)
         if health_message:
             experiment.mark_terminal_health(message=health_message, failed_at=ended_at)
@@ -561,6 +864,50 @@ class CaptureEngine:
             return _capture_error_message(exc)
         return None
 
+    def _detected_camera(self, camera_index: int) -> CameraInfo:
+        for camera in self.detected_camera_func():
+            if camera.index == camera_index:
+                return camera
+        raise CameraConfigError(f"Camera index {camera_index} is not detected.")
+
+    def _detected_camera_payload(self, camera: CameraInfo) -> dict[str, Any]:
+        return {
+            "label": camera.label,
+            "index": camera.index,
+            "identity_strategy": camera.identity_strategy,
+            "stable_id": camera.stable_id,
+            "warnings": camera.warnings,
+            "identity_warning": camera.identity_strategy != "hardware_id",
+        }
+
+    def _ensure_detected_camera_not_busy(self, camera_index: int) -> None:
+        configured_by_label = {camera.label: camera for camera in self._load_cameras_if_present()}
+        with self._lock:
+            busy_labels = set(self._starting_cameras)
+            busy_labels.update(
+                label
+                for label, count in self._capturing_cameras.items()
+                if count > 0
+            )
+            busy_labels.update(experiment.config.camera_label for experiment in self._active.values())
+
+        for label in busy_labels:
+            camera = configured_by_label.get(label)
+            if camera and camera.last_seen_index == camera_index:
+                raise ActiveExperimentError(f"Camera {label} is currently busy")
+
+    def _ensure_camera_setup_idle(self) -> None:
+        with self._lock:
+            if self._starting_cameras or self._active or any(self._capturing_cameras.values()):
+                raise ActiveExperimentError(
+                    "Camera setup is unavailable while experiments are running."
+                )
+
+    def _load_cameras_if_present(self) -> list[CameraRecord]:
+        if not self.cameras_path.exists():
+            return []
+        return self._load_cameras()
+
     def _storage_failure(self, exc: Exception, path: Path) -> _TerminalStorageFailure | None:
         reason = self._storage_failure_reason(exc, path)
         if reason is None:
@@ -612,6 +959,14 @@ class CaptureEngine:
             self._ensure_camera_is_available(camera_label)
             self._starting_cameras.add(camera_label)
 
+    def _ensure_camera_verified(self, camera_label: str) -> None:
+        if not self.verification_required():
+            return
+        with self._lock:
+            if camera_label in self._verified_camera_labels:
+                return
+        raise EngineError("Confirm all configured cameras before starting experiments.")
+
     def _check_disk_space(self, config: ExperimentConfig) -> None:
         expected_images = math.ceil((config.duration_hours * 60) / config.interval_minutes) + 2
         required = expected_images * CONSERVATIVE_BYTES_PER_IMAGE
@@ -632,12 +987,7 @@ class CaptureEngine:
         raise CameraConfigError(f"Unknown camera label {camera_label!r}; configured labels: {labels}")
 
     def _load_cameras(self) -> list[CameraRecord]:
-        if not self.cameras_path.exists():
-            raise CameraConfigError(
-                f"Missing {self.cameras_path}; run tools/camera_setup.py setup first"
-            )
-        with self.cameras_path.open("r", encoding="utf-8") as file:
-            payload = json.load(file)
+        payload = self._load_camera_config_payload()
         records = payload.get("cameras")
         if not isinstance(records, list):
             raise CameraConfigError(f"Expected cameras list in {self.cameras_path}")
@@ -653,18 +1003,37 @@ class CaptureEngine:
                     stable_id=str(record["stable_id"]),
                     last_seen_index=int(record["last_seen_index"]),
                     warnings=list(record.get("warnings") or []),
+                    notes=str(record.get("notes") or ""),
+                    last_confirmed_at=(
+                        str(record["last_confirmed_at"])
+                        if record.get("last_confirmed_at")
+                        else None
+                    ),
+                    last_confirmed_index=(
+                        int(record["last_confirmed_index"])
+                        if record.get("last_confirmed_index") is not None
+                        else None
+                    ),
                 )
             )
         return cameras
 
-    def _load_settings(self) -> dict[str, Any]:
-        if not self.settings_path.exists():
-            return {}
-        with self.settings_path.open("r", encoding="utf-8") as file:
+    def _load_camera_config_payload(self) -> dict[str, Any]:
+        if not self.cameras_path.exists():
+            raise CameraConfigError(
+                f"Missing {self.cameras_path}; run tools/camera_setup.py setup first"
+            )
+        with self.cameras_path.open("r", encoding="utf-8") as file:
             payload = json.load(file)
         if not isinstance(payload, dict):
-            raise EngineError(f"Expected settings object in {self.settings_path}")
+            raise CameraConfigError(f"Expected camera config object in {self.cameras_path}")
         return payload
+
+    def _load_settings(self) -> dict[str, Any]:
+        try:
+            return load_effective_settings(self.settings_path, create_missing=False)
+        except Exception as exc:
+            raise EngineError(str(exc)) from exc
 
 
 def _format_minutes(value: float) -> str:
@@ -673,6 +1042,11 @@ def _format_minutes(value: float) -> str:
 
 def _format_hours(value: float) -> str:
     return f"{int(value)}h" if float(value).is_integer() else f"{value:g}h"
+
+
+def _log_value(value: str) -> str:
+    cleaned = " ".join(str(value or "").split())
+    return json.dumps(cleaned)
 
 
 def _capture_error_message(exc: Exception) -> str:

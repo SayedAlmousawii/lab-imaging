@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Lab Imaging{% endblock %}
+
+{% block content %}
+  <header class="page-head">
+    <div class="titles">
+      <div class="eyebrow">System</div>
+      <h1>Settings</h1>
+      <div class="sub" id="settings-sub">Loading configuration…</div>
+    </div>
+    <div class="actions">
+      <button class="btn" type="button" id="settings-refresh">
+        <svg class="ic ic-16" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 9 16 9"/></svg>
+        Refresh
+      </button>
+      <button class="btn is-accent" type="submit" form="settings-form" id="settings-save">
+        <svg class="ic ic-16" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Save settings
+      </button>
+    </div>
+  </header>
+
+  <div id="settings-alerts"></div>
+
+  <section class="settings-grid">
+    <form id="settings-form" class="card">
+      <div class="card-body">
+        <section class="settings-section">
+          <header class="section-head">
+            <h2>Storage</h2>
+            <span class="sub">Future runs</span>
+          </header>
+          <div class="field" data-field="experiments_dir">
+            <label class="lbl" for="experiments-dir">Experiment folder</label>
+            <input id="experiments-dir" class="input is-mono" name="experiments_dir" type="text" autocomplete="off" required>
+            <span class="hint js-error" hidden></span>
+          </div>
+          <div class="note is-info storage-guidance" aria-label="Cloud sync storage guidance">
+            <svg class="ico ic ic-16" viewBox="0 0 24 24"><path d="M12 3v10"/><path d="m8 9 4 4 4-4"/><path d="M20 17.5A3.5 3.5 0 0 1 16.5 21h-9A3.5 3.5 0 0 1 4 17.5c0-1.6 1.1-3 2.6-3.4A5.5 5.5 0 0 1 17 11.6a4.8 4.8 0 0 1 3 5.9Z"/></svg>
+            <div class="body">
+              <strong>Cloud backup stays outside capture.</strong>
+              <span class="meta">To use OneDrive, Google Drive Desktop, Dropbox, Synology Drive, or a network sync tool, choose a normal local folder managed by that software. Lab Imaging writes local files first, experiments continue without internet, and sync should copy completed files after they are written. Avoid browser uploads or internet-dependent transfers during active capture.</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <header class="section-head">
+            <h2>Capture defaults</h2>
+            <span class="sub">Future runs</span>
+          </header>
+        <div class="two-col">
+          <div class="field" data-field="default_interval_minutes">
+            <label class="lbl" for="default-interval-minutes">Default interval</label>
+            <div class="input-group">
+              <input id="default-interval-minutes" class="input is-mono" name="default_interval_minutes" type="number" min="0.01" step="0.01" required>
+              <span class="unit">minutes</span>
+            </div>
+            <span class="hint js-error" hidden></span>
+          </div>
+          <div class="field" data-field="default_duration_hours">
+            <label class="lbl" for="default-duration-hours">Default duration</label>
+            <div class="input-group">
+              <input id="default-duration-hours" class="input is-mono" name="default_duration_hours" type="number" min="0.01" step="0.01" required>
+              <span class="unit">hours</span>
+            </div>
+            <span class="hint js-error" hidden></span>
+          </div>
+        </div>
+
+        <div class="settings-triplet">
+          <div class="field" data-field="jpeg_quality">
+            <label class="lbl" for="jpeg-quality">JPEG quality</label>
+            <input id="jpeg-quality" class="input is-mono" name="jpeg_quality" type="number" min="1" max="100" step="1" required>
+            <span class="hint js-error" hidden></span>
+          </div>
+          <div class="field" data-field="capture_retries">
+            <label class="lbl" for="capture-retries">Capture retries</label>
+            <input id="capture-retries" class="input is-mono" name="capture_retries" type="number" min="0" step="1" required>
+            <span class="hint js-error" hidden></span>
+          </div>
+          <div class="field" data-field="warmup_frames">
+            <label class="lbl" for="warmup-frames">Warmup frames</label>
+            <input id="warmup-frames" class="input is-mono" name="warmup_frames" type="number" min="0" step="1" required>
+            <span class="hint js-error" hidden></span>
+          </div>
+        </div>
+        </section>
+      </div>
+    </form>
+
+    <aside class="card">
+      <header class="card-head">
+        <h2>Diagnostics</h2>
+        <span class="sub">Read-only</span>
+      </header>
+      <div class="card-body">
+        <dl class="diagnostic-list" id="diagnostics-list">
+          <div><dt>Experiments directory</dt><dd class="mono">—</dd></div>
+          <div><dt>Settings file</dt><dd class="mono">—</dd></div>
+          <div><dt>Camera config</dt><dd class="mono">—</dd></div>
+          <div><dt>LAN access</dt><dd>—</dd></div>
+          <div><dt>Python</dt><dd class="mono">—</dd></div>
+          <div><dt>OpenCV</dt><dd class="mono">—</dd></div>
+          <div><dt>Commit</dt><dd class="mono">—</dd></div>
+        </dl>
+      </div>
+    </aside>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='settings.js') }}"></script>
+{% endblock %}
