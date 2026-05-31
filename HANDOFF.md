@@ -10,13 +10,14 @@ changed (write "no changes this session" explicitly under that date).
 ## Current state
 
 - **Current phase:** Phase 6 — dashboard workflow features. Phase 5 is
-  considered complete by the human. Phase 6 Task 1 through Task 8,
+  considered complete by the human. Phase 6 Task 1 through Task 9,
   including dashboard hot-plug detection, detected-preview, stale
   camera-row/preview/draft-input guards, the Settings page,
   configurable experiment save location, cloud-synced storage guidance,
   post-experiment notes, the read-only experiment browser, and
   maintenance mode with maintenance-only fresh-still preview are
-  implemented locally.
+  implemented locally. Task 9 is complete as a docs-only recommendation
+  to keep preview as repeated fresh stills for the current Phase 6 path.
 - **Current branch:** `phase-6-dashboard-workflows`.
 - **Open questions:** none.
 - **Known issues:** macOS AVFoundation also exposes a Continuity/iPhone
@@ -25,8 +26,9 @@ changed (write "no changes this session" explicitly under that date).
   approved Terminal can run the real-camera driver successfully. Manual
   Terminal-hosted post-fix stale-row/hot-plug preview and draft-input
   validation is pending.
-- **Next actions:** Implement Phase 6 Task 9: live preview / repeated
-  preview investigation, if the human wants to continue Phase 6.
+- **Next actions:** Human review of the completed Phase 6 Task 9
+  recommendation. Optional future work should be a separate
+  repeated-still UX spec, not production live-preview implementation.
 
 ---
 
@@ -1006,6 +1008,13 @@ changed (write "no changes this session" explicitly under that date).
   lacks macOS camera permission.
 - No push was performed.
 
+### 2026-05-31 — Download and run question answered
+
+- No code changes this session.
+- Reviewed the current handoff, Phase 6 spec, README, CONTRIBUTING
+  setup notes, requirements, settings example, and git branch state to
+  explain how another person can download and run the software today.
+
 ### 2026-05-31 — Phase 6 Task 4 configurable save location implemented
 
 - Added editable `experiments_dir` storage controls to the Settings page.
@@ -1256,4 +1265,31 @@ changed (write "no changes this session" explicitly under that date).
 - Manual real-camera stale-row/hot-plug preview and draft-input
   validation remains pending from Task 2 because the Codex app process
   lacks macOS camera permission.
+- No push was performed.
+
+### 2026-05-31 — Phase 6 Task 9 preview recommendation completed
+
+- Completed Phase 6 Task 9 as a docs-only investigation outcome.
+- Updated `specs/phase-6-task-9-preview-investigation.md` into the
+  final recommendation report.
+- Recommended keeping production preview as repeated fresh stills for
+  the current Phase 6 completion path.
+- Explicitly rejected continuous live preview, streaming endpoints, and
+  long-lived camera managers unless a later implementation spec changes
+  the preview model and includes Windows hardware validation.
+- Added the repeated-still UX improvement rules: `/api/preview` remains
+  open-grab-close, future auto-refresh must be bounded and active-view
+  scoped, busy cameras must show explicit feedback, and preview refresh
+  must not affect experiment images, sequence numbers, or metadata
+  image counts.
+- Logged decision #29 in `DECISIONS.md`.
+- Validation passed:
+  - `git diff --check`
+  - `rg "import cv2|from cv2" -n labcam tools` reports only
+    `labcam/cameras/base_capture.py`.
+  - `rg "cv2\\.imshow" -n labcam tools` reports no matches.
+  - `rg "^opencv-python($|[<=>])" -n requirements.txt` reports no
+    matches.
+- No production preview code, streaming route, camera manager, or
+  frontend live-preview UI was added.
 - No push was performed.

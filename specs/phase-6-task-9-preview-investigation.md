@@ -1,62 +1,108 @@
-# Phase 6 Task 9 — Live Preview / Repeated Preview Investigation
+# Phase 6 Task 9 - Preview Recommendation
 
-This is an investigation and design-spec task. It must complete before
-any continuous preview implementation.
+This task closes the live preview / repeated preview investigation as a
+design recommendation. It does not add production preview code.
 
-## Goal
+## Recommendation
 
-Decide whether Lab Imaging should keep preview as repeated fresh stills
-or intentionally add a live-preview mode with a camera manager that
-preserves capture safety.
+Keep production preview as repeated fresh still captures for the current
+Phase 6 completion path. Do not add continuous live preview, a streaming
+endpoint, or a long-lived camera manager unless a later implementation
+spec explicitly changes the preview model and is validated on Windows
+hardware.
 
-## In Scope
+The current preview model best preserves the core invariants:
 
-- Compare two preview models:
-  - repeated fresh still captures;
-  - continuous live preview.
-- Document impact on camera ownership, global locking, scheduled
-  capture, maintenance mode, and USB stability.
-- Prototype only if needed, behind a local throwaway script or branch.
-- Produce a final recommendation spec before implementation.
+- preview uses open-grab-close capture;
+- every preview path routes through the same capture safety checks as
+  scheduled capture;
+- no production path intentionally holds a camera open between captures;
+- scheduled experiment capture remains still-image based;
+- OS and OpenCV behavior stays isolated in `labcam/cameras/`.
 
-## Out of Scope
+## Model Comparison
 
-- No production live preview in this task.
-- No streaming endpoint in this task.
-- No frontend live-preview UI in this task.
-- No weakening of scheduled still-capture behavior.
+### Repeated Fresh Stills
 
-## Investigation Questions
+Repeated fresh stills keep the existing camera lifetime model. Each
+preview request opens the camera, captures a frame, saves or returns one
+JPEG, and closes the camera. This makes preview behavior easy to reason
+about because it has the same shape as baseline and scheduled captures.
 
-- Can repeated fresh stills satisfy framing and focus needs well enough?
-- If live preview is required, when must it stop for scheduled captures?
-- Does the camera manager hold a camera open, or does it still
-  open-grab-close at a faster cadence?
-- What happens when multiple stations request preview?
-- How does preview interact with maintenance mode?
-- What are the Windows USB and OpenCV failure modes?
+Benefits:
 
-## Invariants
+- Preserves the v1 "stills, not video" architecture.
+- Avoids long-lived camera ownership and driver state.
+- Works with the existing process-wide capture safety model.
+- Keeps preview failures isolated to a single preview request.
+- Fits maintenance mode because a maintenance preview is just another
+  explicit fresh still.
 
-- Scheduled experiment capture remains still-image based.
-- No production path may open two cameras simultaneously.
-- OS/OpenCV work remains in `labcam/cameras/`.
-- Any change to preview semantics must be explicit in specs before code.
+Tradeoffs:
 
-## Test / Evidence Plan
+- Framing and focus feedback is slower than a true video feed.
+- Users must click preview again, or a future UI must perform bounded
+  repeated refresh.
+- Frequent preview refresh still competes for camera time and must show
+  clear busy feedback during scheduled capture windows.
 
-1. **Repeated stills:** measure usability and capture timing with
-   repeated still previews.
-2. **Live prototype if needed:** test one camera on Windows without
-   scheduled capture conflicts.
-3. **Conflict simulation:** verify what happens when preview and
-   scheduled capture compete.
-4. **Recommendation:** write the chosen implementation spec and update
-   Phase 6 ordering.
+### Continuous Live Preview
+
+Continuous live preview would intentionally change camera lifetime
+semantics. A camera manager would need to decide which camera may stay
+open, how preview stops before scheduled captures, how other stations
+queue or fail preview requests, and how Windows USB/OpenCV driver
+failures are recovered.
+
+Risks:
+
+- A live camera can conflict with scheduled capture unless ownership is
+  centrally coordinated and preemptible.
+- Holding cameras open increases exposure to USB hub, driver, and
+  OpenCV backend quirks, especially on the Windows lab target.
+- Multi-station preview can accidentally pressure the "never two
+  cameras open simultaneously" invariant.
+- Maintenance mode becomes ambiguous unless preview is explicitly
+  defined as a pause-only, preemptible, non-recording operation.
+- A streaming endpoint would expand the dashboard surface and must be
+  specified, tested, and validated separately.
+
+## Interaction Rules
+
+Any future repeated-still UX improvement must follow these rules:
+
+- `POST /api/preview` remains open-grab-close and returns one fresh JPEG.
+- Button-triggered preview remains valid on the New Experiment,
+  verification, camera configuration, and maintenance workflows.
+- A future auto-refresh UI may request repeated stills only at a bounded
+  cadence and only while the relevant control/view is active.
+- Auto-refresh must stop or skip when the selected camera is scheduled,
+  capturing, being configured, or otherwise reported busy.
+- Busy conflicts must show explicit dashboard feedback instead of
+  silently queueing behind scheduled capture.
+- Preview refresh must not write into an experiment `images/` folder,
+  advance sequence numbers, or change `metadata.json` image counts.
+
+## Future Spec Trigger
+
+Write a separate implementation spec before adding any of the following:
+
+- continuous live preview;
+- a streaming preview endpoint;
+- a camera manager that keeps cameras open;
+- background preview polling that runs without explicit active-user
+  context;
+- preview behavior that can preempt, delay, or reschedule experiment
+  captures.
+
+That future spec must include Windows hardware validation with the real
+USB hub and lab webcams, conflict simulation against scheduled capture,
+and a clear shutdown/preemption model for every open camera.
 
 ## Acceptance Criteria
 
 - A written recommendation exists before any production preview rewrite.
 - Risks to camera locking and scheduled capture are explicitly resolved.
-- If live preview is rejected, the repeated-still path has a clear UX
-  improvement plan.
+- Continuous live preview is rejected for the current Phase 6 completion
+  path.
+- The repeated-still path has a clear UX improvement plan.

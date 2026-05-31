@@ -469,3 +469,21 @@ them here so a future session can revisit if any feel wrong.
   every skipped scheduled time (would make planned maintenance look like
   capture failures); logging only start/end without skipped counts (less
   auditable for long adjustment windows).
+
+### 29. Preview remains repeated fresh stills for Phase 6
+
+- **Decided:** Phase 6 closes the live-preview investigation by keeping
+  production preview as repeated fresh still captures. Continuous live
+  preview, streaming endpoints, and long-lived camera managers are not
+  part of the current Phase 6 completion path.
+- **Why:** Fresh still preview preserves the existing open-grab-close
+  camera lifetime, process-wide capture safety model, and scheduled
+  still-capture invariants. Continuous live preview would change camera
+  ownership semantics and needs a separate implementation spec plus
+  Windows hardware validation before it is safe to build.
+- **Considered and rejected:** Adding live preview as a small dashboard
+  enhancement (it changes capture ownership and conflict behavior);
+  adding a streaming endpoint without a camera-manager spec (too much
+  unvalidated production surface); auto-refreshing previews without
+  bounded cadence and busy-state rules (could compete with scheduled
+  capture in unclear ways).
