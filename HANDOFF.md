@@ -1375,3 +1375,28 @@ changed (write "no changes this session" explicitly under that date).
     matches.
 - Windows packaging build and real-camera portable-folder validation
   were not run in this Mac environment. No push was performed.
+
+### 2026-05-31 — Phase 7 Windows build path fix
+
+- Reviewed the Windows build transcript from
+  `C:\Users\sayed\lab-imaging`.
+- The Windows environment reached PyInstaller successfully after Python
+  3.11, `.venv`, and dependencies were installed.
+- The build failed because `packaging/LabImaging.spec` resolved
+  `SPECPATH` as though it were the spec file path, but PyInstaller
+  provides it as the spec directory. This made `ROOT` resolve to
+  `C:\Users\sayed`, so PyInstaller searched for
+  `C:\Users\sayed\labcam\portable_launcher.py`.
+- Fixed `packaging/LabImaging.spec` so `ROOT` resolves to the repo root
+  whether `SPECPATH` is the repo root or the `packaging/` directory.
+- Updated `packaging/build-windows-portable.ps1` to run PyInstaller
+  from `$ProjectRoot` with `Push-Location` / `Pop-Location` for stable
+  relative behavior.
+- Validation passed:
+  - `git diff --check`
+  - `.venv/bin/python -m compileall labcam tools`
+  - local spec-root sanity check confirmed both `packaging` and repo-root
+    contexts resolve to a root containing `labcam/portable_launcher.py`.
+- Windows retry is still pending. After pulling this fix on Windows, run
+  `.\packaging\build-windows-portable.ps1` again and confirm
+  `dist\LabImagingPortable\` is created.

@@ -3,7 +3,8 @@
 from pathlib import Path
 
 
-ROOT = Path(SPECPATH).resolve().parent.parent
+SPEC_PATH = Path(SPECPATH).resolve()
+ROOT = SPEC_PATH if (SPEC_PATH / "labcam").exists() else SPEC_PATH.parent
 
 datas = [
     (str(ROOT / "labcam" / "web" / "templates"), "labcam/web/templates"),

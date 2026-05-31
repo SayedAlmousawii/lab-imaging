@@ -63,7 +63,12 @@ if (Test-Path $PortableDir) {
 }
 
 Write-Host "Running PyInstaller..."
-& $PythonExe -m PyInstaller --noconfirm --clean --distpath $DistDir --workpath $BuildDir $SpecPath
+Push-Location $ProjectRoot
+try {
+    & $PythonExe -m PyInstaller --noconfirm --clean --distpath $DistDir --workpath $BuildDir $SpecPath
+} finally {
+    Pop-Location
+}
 
 if (-not (Test-Path $PortableDir)) {
     throw "PyInstaller did not create $PortableDir"
